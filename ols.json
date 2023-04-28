@@ -1,0 +1,10 @@
+{
+    "collections": [{ "name": "core", "path": "/home/joseph/Dropbox/Projects/odin/Odin-dev-2023-04/Odin-dev-2023-04/core/" },
+                    { "name": "vendor", "path": "/home/joseph/Dropbox/Projects/odin/Odin-dev-2023-04/Odin-dev-2023-04/vendor/" },
+                    { "name": "dem", "path": "/home/joseph/Dropbox/Projects/odin/learn-odin/raylib/master_thesis/dem"}],
+    "enable_document_symbols": true,
+    "enable_semantic_tokens": true,
+    "enable_snippets": true,
+    "enable_references": true,
+    "verbose": true
+}

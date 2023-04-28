@@ -1,0 +1,3 @@
+* TODO
+- [ ] render grid of numbers (1 to 20)
+- [ ] mouse select a box in grid and interact with it

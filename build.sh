@@ -1,3 +1,7 @@
 #!/usr/bin/bash
 
-odin run . -o:none -debug
+set -e
+echo BUILD:
+time odin build . -o:none -debug -use-separate-modules
+echo OUTPUT:
+./lucky_numbers.bin 
