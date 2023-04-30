@@ -1,4 +1,4 @@
-package lucky_numbers
+package irish_integers
 
 import "core:fmt"
 import rl "vendor:raylib"
