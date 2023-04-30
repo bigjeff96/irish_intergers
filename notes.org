@@ -7,13 +7,13 @@
   - [X] left click to place number
   - [X] board state changed
     # able to cancel placement of number and put it elsewhere
-- [ ] only be able to place 1 number at time
-- [ ] generate next number from a fixed set of numbers
-  - [ ] flip a number
-  - [ ] show already flipped numbers
-  - [ ] be able to:
-    - [ ] choose to flip a number
-    - [ ] take an already flipped number
-    - [ ] swap a placed number with one in hand
+- [X] only be able to place 1 number at time
+- [X] generate next number from a fixed set of numbers
+- [ ] flip a number
+- [ ] show already flipped numbers
+- [ ] be able to:
+  - [ ] take an already flipped number
+  - [ ] choose to flip a number
+  - [ ] swap a placed number with one in hand or already flipped
 
     

@@ -2,7 +2,6 @@ package irish_integers
 
 import "core:fmt"
 import "core:c"
-import "core:math"
 import "core:math/rand"
 import "core:mem"
 import rl "vendor:raylib"
@@ -19,34 +18,33 @@ square_length: f32 = BOARD_SIZE / 4
 main :: proc() {
     using rl
     SetConfigFlags({.VSYNC_HINT, .MSAA_4X_HINT})
-    /* SetTraceLogLevel(.WARNING) */
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "lul")
+    SetTraceLogLevel(.WARNING)
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
     defer CloseWindow()
 
     SetTargetFPS(60)
-
-    board: Board_matrix
-    state: Game_state = .NEW_NUMBER
-    number_to_place: int
+    game := init_game()
     for !WindowShouldClose() {
+        using game
         if IsKeyPressed(.Q) do break
         if IsKeyPressed(.R) {
-            mem.set(&board, 0, size_of(Cell_state) * 16)
+            mem.set(&game.board, 0, size_of(Cell_state) * 16)
+            for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
             state = .NEW_NUMBER
         }
-        update_game_state(&state, &number_to_place, &board)
-        render_game(&board, &number_to_place)
+        update_game_state(&game)
+        render_game(&game)
         free_all(context.temp_allocator)
     }
 }
 
-update_game_state :: proc(state: ^Game_state, number_to_place: ^int, board: ^Board_matrix) {
-    using rl
+update_game_state :: proc(game: ^Game) {
+    using rl, game
     mouse_position := GetMousePosition()
-    switch state^ {
+    switch state {
     case .NEW_NUMBER:
-        number_to_place^ = random_number()
-        state^ = .NUMBER_TO_PLACE
+        number_to_place = flip_number_piece_and_put_in_hand(game.number_pieces[:]).number
+        state = .NUMBER_TO_PLACE
     case .NUMBER_TO_PLACE:
         //check collison with each cell
         for i in 0 ..< 4 {
@@ -59,44 +57,47 @@ update_game_state :: proc(state: ^Game_state, number_to_place: ^int, board: ^Boa
                     using current_cell := &board[i][j]
                     highlighted = true
                     if number == 0 {
-                        number = number_to_place^
-                        state^ = .NEW_NUMBER
+                        number = number_to_place
+                        state = .NUMBER_PLACED
+                        number_pieces[number_to_place - 1].piece_state = .ON_BOARD
                     } else do fmt.println("cell already filled")
                 } else do board[i][j].highlighted = false
             }
         }
+    case .NUMBER_PLACED:
+        if IsMouseButtonReleased(.LEFT) do state = .NEW_NUMBER
     }
 }
 
-render_game :: proc(board: ^Board_matrix, number_to_place: ^int) {
-    using rl
+render_game :: proc(game: ^Game) {
+    using rl, game
     BeginDrawing()
     defer EndDrawing()
 
-    ClearBackground(RAYWHITE)
+    ClearBackground(BLACK)
     origine := Vector2{board_rect.x, board_rect.y}
     // draw board_rect and line separators
     defer {
         // board_rect
-        DrawRectangleLinesEx(board_rect, 6, BLACK)
+        DrawRectangleLinesEx(board_rect, 6, RAYWHITE)
         // vertical
         for i in 0 ..< 3 {
             x: f32 = auto_cast square_length * (auto_cast i + 1)
             start := origine + {x, 0}
             end := origine + {x, board_rect.height}
-            DrawLineEx(start, end, 3, BLACK)
+            DrawLineEx(start, end, 3, RAYWHITE)
         }
         // horizontal
         for i in 0 ..< 3 {
             y: f32 = auto_cast square_length * (auto_cast i + 1)
             start := origine + {0, y}
             end := origine + {board_rect.width, y}
-            DrawLineEx(start, end, 3, BLACK)
+            DrawLineEx(start, end, 3, RAYWHITE)
         }
         // numbers
         for i in 0 ..< 4 {
             for j in 0 ..< 4 {
-                draw_number_in_cell(board, {i, j})
+                draw_number_in_cell(&board, {i, j})
             }
         }
     }
@@ -106,7 +107,7 @@ render_game :: proc(board: ^Board_matrix, number_to_place: ^int) {
             using current_cell := board[i][j]
             if highlighted {
                 cell_rect := get_cell_rect({i, j})
-                DrawRectangleRec(cell_rect, YELLOW)
+                DrawRectangleRec(cell_rect, GRAY)
             }
         }
     }
@@ -117,20 +118,28 @@ render_game :: proc(board: ^Board_matrix, number_to_place: ^int) {
         auto_cast (board_rect.x + board_rect.width + 50),
         auto_cast board_rect.y + 20,
         25,
-        BLACK,
+        RAYWHITE,
     )
     DrawText(
-        fmt.ctprintf("%d", number_to_place^),
+        fmt.ctprintf("%d", number_to_place),
         auto_cast (board_rect.x + board_rect.width + 150),
         auto_cast board_rect.y + 59,
         FONT_SIZE,
-        BLACK,
+        RAYWHITE,
     )
 }
 
+Game :: struct {
+    state:           Game_state,
+    number_to_place: int,
+    board:           Board_matrix,
+    number_pieces:   [20]Number_piece,
+}
+
 Game_state :: enum {
-    NUMBER_TO_PLACE,
     NEW_NUMBER,
+    NUMBER_TO_PLACE,
+    NUMBER_PLACED,
 }
 
 Rectangle_cint :: struct {
@@ -145,16 +154,25 @@ Cell_state :: struct {
 // if number is zero -> no number in cell
 Board_matrix :: distinct [4][4]Cell_state
 
+// hidden -> flipped <-> in_hand -> on_board      
+//              ^                         /       
+//              \ _______________________/ (swap) 
+Number_piece :: struct {
+    piece_state: enum {
+        HIDDEN,
+        FLIPPED, // known but not in hand  
+        IN_HAND,
+        ON_BOARD,
+    },
+    number:      int,
+}
 
-rect_float_to_int :: #force_inline proc(rect: rl.Rectangle) -> Rectangle_cint {
-    return(
-        Rectangle_cint{
-            x = auto_cast rect.x,
-            y = auto_cast rect.y,
-            width = auto_cast rect.width,
-            height = auto_cast rect.height,
-        } \
-    )
+init_game :: proc() -> Game {
+    game: Game
+    for i in 1 ..= 20 {
+        game.number_pieces[i - 1].number = i
+    }
+    return game
 }
 
 draw_number_in_cell :: proc(
@@ -180,8 +198,25 @@ draw_number_in_cell :: proc(
         {box_rect.x, box_rect.y} + {(square_length - measure.x) / 2, (square_length - measure.y) / 2 + 5},
         FONT_SIZE,
         FONT_SPACING,
-        BLACK,
+        RAYWHITE,
     )
+}
+
+flip_number_piece_and_put_in_hand :: proc(number_pieces: []Number_piece) -> ^Number_piece {
+    indices_of_hidden_pieces := make([dynamic]int, context.temp_allocator)
+
+    number_pieces := number_pieces
+    for number_piece, i in number_pieces {
+        using number_piece
+        if piece_state == .HIDDEN {
+            append(&indices_of_hidden_pieces, i)
+        }
+    }
+    assert(len(indices_of_hidden_pieces) > 0)
+
+    index_of_piece_to_flip := rand.choice(indices_of_hidden_pieces[:])
+    number_pieces[index_of_piece_to_flip].piece_state = .IN_HAND
+    return &number_pieces[index_of_piece_to_flip]
 }
 
 random_number :: #force_inline proc(lo := 1, hi := 20, r: ^rand.Rand = nil) -> int {
