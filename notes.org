@@ -1,11 +1,19 @@
 * TODO
 - [X] render grid of numbers (1 to 20)
 - [X] mouse select a box in grid and interact with it
-- [ ] place a number in a cell, and have it stay in that cell
-  - [ ] board state
-  - [ ] number to place
-  - [ ] left click to place number
-  - [ ] board state changed
+- [X] place a number in a cell, and have it stay in that cell
+  - [X] board state
+  - [X] number to place
+  - [X] left click to place number
+  - [X] board state changed
     # able to cancel placement of number and put it elsewhere
+- [ ] only be able to place 1 number at time
+- [ ] generate next number from a fixed set of numbers
+  - [ ] flip a number
+  - [ ] show already flipped numbers
+  - [ ] be able to:
+    - [ ] choose to flip a number
+    - [ ] take an already flipped number
+    - [ ] swap a placed number with one in hand
 
     
