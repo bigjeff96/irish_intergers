@@ -1,3 +1,11 @@
 * TODO
-- [ ] render grid of numbers (1 to 20)
-- [ ] mouse select a box in grid and interact with it
+- [X] render grid of numbers (1 to 20)
+- [X] mouse select a box in grid and interact with it
+- [ ] place a number in a cell, and have it stay in that cell
+  - [ ] board state
+  - [ ] number to place
+  - [ ] left click to place number
+  - [ ] board state changed
+    # able to cancel placement of number and put it elsewhere
+
+    
