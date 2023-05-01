@@ -47,15 +47,18 @@ update_game_state :: proc(game: ^Game) {
         state = .NUMBER_TO_PLACE
     case .NUMBER_TO_PLACE:
         //check collison with each cell
+	one_cell_selected := false // only 1 cell to interact at a time
         for i in 0 ..< 4 {
             for j in 0 ..< 4 {
                 cell_rect := get_cell_rect({i, j})
                 collision := CheckCollisionPointRec(mouse_position, cell_rect)
-                if collision && IsMouseButtonUp(.LEFT) {
+                if collision && IsMouseButtonUp(.LEFT) && !one_cell_selected {
                     board[i][j].highlighted = true
-                } else if collision && !IsMouseButtonUp(.LEFT) {
+		    one_cell_selected = true
+                } else if collision && !IsMouseButtonUp(.LEFT) && !one_cell_selected {
                     using current_cell := &board[i][j]
                     highlighted = true
+		    one_cell_selected = true
                     if number == 0 {
                         number = number_to_place
                         state = .NUMBER_PLACED
@@ -114,7 +117,7 @@ render_game :: proc(game: ^Game) {
 
     // number to place, right of the board
     DrawText(
-        fmt.ctprintf("Next number to place:"),
+        fmt.ctprintf("Number in hand:"),
         auto_cast (board_rect.x + board_rect.width + 50),
         auto_cast board_rect.y + 20,
         25,
@@ -122,7 +125,7 @@ render_game :: proc(game: ^Game) {
     )
     DrawText(
         fmt.ctprintf("%d", number_to_place),
-        auto_cast (board_rect.x + board_rect.width + 150),
+        auto_cast (board_rect.x + board_rect.width + 120),
         auto_cast board_rect.y + 59,
         FONT_SIZE,
         RAYWHITE,
