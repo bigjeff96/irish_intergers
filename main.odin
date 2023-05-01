@@ -4,6 +4,8 @@ import "core:fmt"
 import "core:c"
 import "core:math/rand"
 import "core:mem"
+import mu "vendor:microui"
+import mu_rl "micro_ui_raylib"
 import rl "vendor:raylib"
 
 WINDOW_HEIGHT :: 1080
@@ -16,54 +18,89 @@ board_rect := rl.Rectangle{(WINDOW_WIDTH - BOARD_SIZE) / 2, (WINDOW_HEIGHT - BOA
 square_length: f32 = BOARD_SIZE / 4
 
 main :: proc() {
-    using rl
+    using rl, mu_rl
     SetConfigFlags({.VSYNC_HINT, .MSAA_4X_HINT})
     SetTraceLogLevel(.WARNING)
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
     defer CloseWindow()
 
+    // microui
+    pixels := make([][4]u8, mu.DEFAULT_ATLAS_WIDTH * mu.DEFAULT_ATLAS_HEIGHT)
+    for alpha, i in mu.default_atlas_alpha {
+        pixels[i] = {0xff, 0xff, 0xff, alpha}
+    }
+    defer delete(pixels)
+
+    image := rl.Image {
+        data    = raw_data(pixels),
+        width   = mu.DEFAULT_ATLAS_WIDTH,
+        height  = mu.DEFAULT_ATLAS_HEIGHT,
+        mipmaps = 1,
+        format  = .UNCOMPRESSED_R8G8B8A8,
+    }
+    ui_state.atlas_texture = rl.LoadTextureFromImage(image)
+    defer rl.UnloadTexture(ui_state.atlas_texture)
+
+    ctx := &ui_state.mu_ctx
+    mu.init(ctx)
+    ctx.text_width = rl_text_width
+    ctx.text_height = rl_text_height
+    ctx.style.spacing += 3
+
     SetTargetFPS(60)
     game := init_game()
     for !WindowShouldClose() {
         using game
+	mu_input(ctx)
         if IsKeyPressed(.Q) do break
         if IsKeyPressed(.R) {
             mem.set(&game.board, 0, size_of(Cell_state) * 16)
             for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
             state = .NEW_NUMBER
         }
-        update_game_state(&game)
-        render_game(&game)
+        update_game_state(&game, ctx)
+        render_game(&game, ctx)
         free_all(context.temp_allocator)
     }
 }
 
-update_game_state :: proc(game: ^Game) {
+update_game_state :: proc(game: ^Game, ctx: ^mu.Context) {
     using rl, game
     mouse_position := GetMousePosition()
+
+    mu.begin(ctx)
+    mu_rl.demo_reel(ctx)
+    defer mu.end(ctx)
+    
     switch state {
     case .NEW_NUMBER:
         number_to_place = flip_number_piece_and_put_in_hand(game.number_pieces[:]).number
         state = .NUMBER_TO_PLACE
     case .NUMBER_TO_PLACE:
         //check collison with each cell
-	one_cell_selected := false // only 1 cell to interact at a time
-        for i in 0 ..< 4 {
+        one_cell_selected := false // only 1 cell to interact at a time
+	mouse_in_ui := mu_rl.mouse_in_ui(ctx)
+
+        loop: for i in 0 ..< 4 {
             for j in 0 ..< 4 {
+		if mouse_in_ui {
+		    board[i][j].highlighted = false
+		    continue
+		}
                 cell_rect := get_cell_rect({i, j})
                 collision := CheckCollisionPointRec(mouse_position, cell_rect)
                 if collision && IsMouseButtonUp(.LEFT) && !one_cell_selected {
                     board[i][j].highlighted = true
-		    one_cell_selected = true
+                    one_cell_selected = true
                 } else if collision && !IsMouseButtonUp(.LEFT) && !one_cell_selected {
                     using current_cell := &board[i][j]
                     highlighted = true
-		    one_cell_selected = true
+                    one_cell_selected = true
                     if number == 0 {
                         number = number_to_place
                         state = .NUMBER_PLACED
                         number_pieces[number_to_place - 1].piece_state = .ON_BOARD
-                    } else do fmt.println("cell already filled")
+                    }
                 } else do board[i][j].highlighted = false
             }
         }
@@ -72,8 +109,8 @@ update_game_state :: proc(game: ^Game) {
     }
 }
 
-render_game :: proc(game: ^Game) {
-    using rl, game
+render_game :: proc(game: ^Game, ctx: ^mu.Context) {
+    using rl, game, mu_rl
     BeginDrawing()
     defer EndDrawing()
 
@@ -103,6 +140,9 @@ render_game :: proc(game: ^Game) {
                 draw_number_in_cell(&board, {i, j})
             }
         }
+	{ //microui
+	    render(ctx)
+	}
     }
 
     for i in 0 ..< 4 {
@@ -114,7 +154,6 @@ render_game :: proc(game: ^Game) {
             }
         }
     }
-
     // number to place, right of the board
     DrawText(
         fmt.ctprintf("Number in hand:"),
@@ -130,6 +169,7 @@ render_game :: proc(game: ^Game) {
         FONT_SIZE,
         RAYWHITE,
     )
+
 }
 
 Game :: struct {

@@ -10,6 +10,8 @@
 - [X] only be able to place 1 number at time
 - [X] generate next number from a fixed set of numbers
 - [X] fixed bug of selecting multiple cells at the same time
+- [X] add micro_ui to make buttons baby
+- [X] better mouse in ui function
 - [ ] show already flipped numbers
 - [ ] flip a number
 - [ ] be able to:
