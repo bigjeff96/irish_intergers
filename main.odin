@@ -51,7 +51,7 @@ main :: proc() {
     game := init_game()
     for !WindowShouldClose() {
         using game
-	mu_input(ctx)
+        mu_input(ctx)
         if IsKeyPressed(.Q) do break
         if IsKeyPressed(.R) {
             mem.set(&game.board, 0, size_of(Cell_state) * 16)
@@ -69,24 +69,51 @@ update_game_state :: proc(game: ^Game, ctx: ^mu.Context) {
     mouse_position := GetMousePosition()
 
     mu.begin(ctx)
-    mu_rl.demo_reel(ctx)
     defer mu.end(ctx)
-    
+
+    @(static)
+    opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE}
+
+    if board[0][0].number == 0 {
+        if mu.window(
+               ctx,
+               "a series of buttons",
+               mu.Rect{auto_cast board_rect.x - 120, auto_cast board_rect.y, 100, 300},
+               opts,
+           ) {
+            if .SUBMIT in mu.button(ctx, "button 1") {
+                if board[0][0].number != 0 do fmt.println("hoho")
+                else do fmt.println("hihi")
+            }
+        }
+    } else {
+        if mu.window(
+               ctx,
+               "a series of buttons",
+               mu.Rect{auto_cast board_rect.x - 120, auto_cast board_rect.y, 100, 300},
+               opts,
+           ) {
+            if .SUBMIT in mu.button(ctx, "test 2") {
+                fmt.println("lul")
+            }
+        }
+    }
+
+
     switch state {
     case .NEW_NUMBER:
         number_to_place = flip_number_piece_and_put_in_hand(game.number_pieces[:]).number
         state = .NUMBER_TO_PLACE
     case .NUMBER_TO_PLACE:
-        //check collison with each cell
         one_cell_selected := false // only 1 cell to interact at a time
-	mouse_in_ui := mu_rl.mouse_in_ui(ctx)
-
+        mouse_in_ui := mu_rl.mouse_in_ui(ctx)
+        //check collison with each cell
         loop: for i in 0 ..< 4 {
             for j in 0 ..< 4 {
-		if mouse_in_ui {
-		    board[i][j].highlighted = false
-		    continue
-		}
+                if mouse_in_ui {
+                    board[i][j].highlighted = false
+                    continue
+                }
                 cell_rect := get_cell_rect({i, j})
                 collision := CheckCollisionPointRec(mouse_position, cell_rect)
                 if collision && IsMouseButtonUp(.LEFT) && !one_cell_selected {
@@ -110,7 +137,7 @@ update_game_state :: proc(game: ^Game, ctx: ^mu.Context) {
 }
 
 render_game :: proc(game: ^Game, ctx: ^mu.Context) {
-    using rl, game, mu_rl
+    using rl, game
     BeginDrawing()
     defer EndDrawing()
 
@@ -140,9 +167,7 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
                 draw_number_in_cell(&board, {i, j})
             }
         }
-	{ //microui
-	    render(ctx)
-	}
+        mu_rl.render(ctx)
     }
 
     for i in 0 ..< 4 {

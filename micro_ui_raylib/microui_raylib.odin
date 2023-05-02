@@ -63,20 +63,10 @@ mu_mouse_input :: proc(ctx: ^mu.Context) {
 }
 
 mouse_in_ui :: proc(ctx: ^mu.Context) -> bool {
-    
-    mouse_pos := rl.GetMousePosition()
-
     for container in ctx.containers do if container.open {
-	using container
-	Rect := rl.Rectangle {
-            x      = auto_cast rect.x,
-            y      = auto_cast rect.y,
-            width  = auto_cast rect.w,
-            height = auto_cast rect.h,
-	}
-	if rl.CheckCollisionPointRec(mouse_pos, Rect) do return true
-    }
-
+            using container
+            if mu.rect_overlaps_vec2(rect, ctx.mouse_pos) do return true
+        }
     return false
 }
 
@@ -243,7 +233,7 @@ demo_reel :: proc(ctx: ^mu.Context) {
         }
 
         if .ACTIVE in mu.header(ctx, "Test Buttons", {.EXPANDED}) {
-            mu.layout_row(ctx, {86, -110, -1})
+            mu.layout_row(ctx, {120, -85, -1})
             mu.label(ctx, "Test buttons 1:")
             if .SUBMIT in mu.button(ctx, "Button 1") {write_log("Pressed button 1")}
             if .SUBMIT in mu.button(ctx, "Button 2") {write_log("Pressed button 2")}
@@ -318,15 +308,15 @@ demo_reel :: proc(ctx: ^mu.Context) {
     }
 
     when false {
-	if mu.window(ctx, "Log Window", {350, 40, 300, 200}, opts) {
+        if mu.window(ctx, "Log Window", {350, 40, 300, 200}, opts) {
             mu.layout_row(ctx, {-1}, -28)
             mu.begin_panel(ctx, "Log")
             mu.layout_row(ctx, {-1}, -1)
             mu.text(ctx, read_log())
             if ui_state.log_buf_updated {
-		panel := mu.get_current_container(ctx)
-		panel.scroll.y = panel.content_size.y
-		ui_state.log_buf_updated = false
+                panel := mu.get_current_container(ctx)
+                panel.scroll.y = panel.content_size.y
+                ui_state.log_buf_updated = false
             }
             mu.end_panel(ctx)
 
@@ -337,19 +327,19 @@ demo_reel :: proc(ctx: ^mu.Context) {
             submitted := false
             mu.layout_row(ctx, {-70, -1})
             if .SUBMIT in mu.textbox(ctx, buf[:], &buf_len) {
-		mu.set_focus(ctx, ctx.last_id)
-		submitted = true
+                mu.set_focus(ctx, ctx.last_id)
+                submitted = true
             }
             if .SUBMIT in mu.button(ctx, "Submit") {
-		submitted = true
+                submitted = true
             }
             if submitted {
-		write_log(string(buf[:buf_len]))
-		buf_len = 0
+                write_log(string(buf[:buf_len]))
+                buf_len = 0
             }
-	}
+        }
     }
-    
+
 
     if mu.window(ctx, "Style Window", {350, 250, 300, 240}) {
         @(static)
