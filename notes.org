@@ -12,11 +12,13 @@
 - [X] fixed bug of selecting multiple cells at the same time
 - [X] add micro_ui to make buttons baby
 - [X] better mouse in ui function
-- [ ] show already flipped numbers
-- [ ] flip a number
-- [ ] be able to:
-  - [ ] take an already flipped number
-  - [ ] choose to flip a number
-  - [ ] swap a placed number with one in hand or already flipped
-
+- [X] show already flipped numbers
+- [X] flip a number
+- [-] be able to:
+  - [X] take an already flipped number
+  - [ ] take a specific flipped number by selecting it via the mouse
+  - [X] choose to flip a number
+  - [X] swap a placed number with one in hand or already flipped
+- [ ] check if new piece on board is valid
+- [ ] stop game when in win state
     

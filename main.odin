@@ -56,7 +56,7 @@ main :: proc() {
         if IsKeyPressed(.R) {
             mem.set(&game.board, 0, size_of(Cell_state) * 16)
             for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
-            state = .NEW_NUMBER
+            state = .NEW_PIECE
         }
         game_logic(&game, ctx)
         render_game(&game, ctx)
@@ -74,63 +74,73 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     @(static)
     opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE}
 
-    if board[0][0].number == 0 {
-        if mu.window(
-               ctx,
-               "a series of buttons",
-               mu.Rect{auto_cast board_rect.x - 120, auto_cast board_rect.y, 100, 300},
-               opts,
-           ) {
-            if .SUBMIT in mu.button(ctx, "button 1") {
-                if board[0][0].number != 0 do fmt.println("hoho")
-                else do fmt.println("hihi")
+    if mu.window(
+           ctx,
+           "a series of buttons",
+           mu.Rect{auto_cast board_rect.x - 190, auto_cast board_rect.y, 190, 100},
+           opts,
+       ) {
+        mu.layout_row(ctx, {-1})
+        // hidden -> flipped <-> in_hand -> on_board      
+        //              ^                         /       
+        //              \ _______________________/ (swap) 
+        switch state {
+        case .NEW_PIECE:
+            if .SUBMIT in mu.button(ctx, "Flip a piece", .NONE, {}) {
+                piece_in_hand = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
+                state = .PIECE_IN_HAND
             }
-        }
-    } else {
-        if mu.window(
-               ctx,
-               "a series of buttons",
-               mu.Rect{auto_cast board_rect.x - 120, auto_cast board_rect.y, 100, 300},
-               opts,
-           ) {
-            if .SUBMIT in mu.button(ctx, "test 2") {
-                fmt.println("lul")
-            }
-        }
-    }
-    switch state {
-    case .NEW_NUMBER:
-        number_to_place = flip_number_piece_and_put_in_hand(game.number_pieces[:]).number
-        state = .NUMBER_TO_PLACE
-    case .NUMBER_TO_PLACE:
-        one_cell_selected := false // only 1 cell to interact at a time
-        mouse_in_ui := mu_rl.mouse_in_ui(ctx)
-        //check collison with each cell
-        loop: for i in 0 ..< 4 {
-            for j in 0 ..< 4 {
-                if mouse_in_ui {
-                    board[i][j].highlighted = false
-                    continue
+
+            if .SUBMIT in mu.button(ctx, "Take a known piece RNG", .NONE, {}) {
+                //Take a random known piece
+                total_flipped := 0
+                for number_piece in number_pieces {
+                    if number_piece.piece_state == .FLIPPED do total_flipped += 1
                 }
-                cell_rect := get_cell_rect({i, j})
-                collision := CheckCollisionPointRec(mouse_position, cell_rect)
-                if collision && IsMouseButtonUp(.LEFT) && !one_cell_selected {
-                    board[i][j].highlighted = true
-                    one_cell_selected = true
-                } else if collision && !IsMouseButtonUp(.LEFT) && !one_cell_selected {
-                    using current_cell := &board[i][j]
-                    highlighted = true
-                    one_cell_selected = true
-                    if number == 0 {
-                        number = number_to_place
-                        state = .NUMBER_PLACED
-                        number_pieces[number_to_place - 1].piece_state = .ON_BOARD
-                    }
-                } else do board[i][j].highlighted = false
+                if total_flipped != 0 {
+                    piece_in_hand = take_random_piece_in_hand(number_pieces[:], .FLIPPED)
+                    state = .PIECE_IN_HAND
+                } else do fmt.println("NO more flipped pieces")
             }
+
+        case .PIECE_IN_HAND:
+            one_cell_selected := false // only 1 cell to interact at a time
+            mouse_in_ui := mu_rl.mouse_in_ui(ctx)
+            //check collison with each cell
+            loop: for i in 0 ..< 4 {
+                for j in 0 ..< 4 {
+                    if mouse_in_ui {
+                        board[i][j].highlighted = false
+                        continue
+                    }
+                    cell_rect := get_cell_rect({i, j})
+                    collision := CheckCollisionPointRec(mouse_position, cell_rect)
+                    if collision && IsMouseButtonUp(.LEFT) && !one_cell_selected {
+                        board[i][j].highlighted = true
+                        one_cell_selected = true
+                    } else if collision && !IsMouseButtonUp(.LEFT) && !one_cell_selected {
+                        using current_cell := &board[i][j]
+                        highlighted = true
+                        one_cell_selected = true
+                        if number == 0 {
+                            number = piece_in_hand.?.number
+                            state = .NUMBER_PLACED
+                            piece_in_hand.?.piece_state = .ON_BOARD
+                            piece_in_hand = nil
+                        } else {
+                            // swapping pieces
+                            state = .NUMBER_PLACED
+                            number_pieces[board[i][j].number - 1].piece_state = .FLIPPED
+                            board[i][j].number = piece_in_hand.?.number
+                            piece_in_hand.?.piece_state = .ON_BOARD
+                            piece_in_hand = nil
+                        }
+                    } else do board[i][j].highlighted = false
+                }
+            }
+        case .NUMBER_PLACED:
+            if IsMouseButtonReleased(.LEFT) do state = .NEW_PIECE
         }
-    case .NUMBER_PLACED:
-        if IsMouseButtonReleased(.LEFT) do state = .NEW_NUMBER
     }
 }
 
@@ -185,26 +195,58 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
         25,
         RAYWHITE,
     )
+
+    piece_in_hand_ok, ok := piece_in_hand.?
+    if ok {
+        DrawText(
+            fmt.ctprintf("%d", piece_in_hand_ok.number),
+            auto_cast (board_rect.x + board_rect.width + 120),
+            auto_cast board_rect.y + 59,
+            FONT_SIZE,
+            RAYWHITE,
+        )
+    }
+
+
+    flipped_pieces_rect := board_rect
+    flipped_pieces_rect.y -= 200
+    flipped_pieces_rect.x -= 100
+    new_square_length := flipped_pieces_rect.width / 10
+
     DrawText(
-        fmt.ctprintf("%d", number_to_place),
-        auto_cast (board_rect.x + board_rect.width + 120),
-        auto_cast board_rect.y + 59,
-        FONT_SIZE,
+        fmt.ctprintf("Flipped Pieces:"),
+        auto_cast flipped_pieces_rect.x,
+        auto_cast flipped_pieces_rect.y - 75,
+        FONT_SIZE - 20,
         RAYWHITE,
     )
+    // render the flipped numbers
+    for number_piece, index in number_pieces {
+        if number_piece.piece_state == .FLIPPED {
+            draw_number_in_square(
+                number_piece.number,
+                {index / 10, index % 10},
+                flipped_pieces_rect,
+                new_square_length,
+                30,
+            )
+        }
+
+    }
+
 
 }
 
 Game :: struct {
-    state:           Game_state,
-    number_to_place: int,
-    board:           Board_matrix,
-    number_pieces:   [20]Number_piece,
+    state:         Game_state,
+    piece_in_hand: Maybe(^Number_piece),
+    board:         Board_matrix,
+    number_pieces: [20]Number_piece,
 }
 
 Game_state :: enum {
-    NEW_NUMBER,
-    NUMBER_TO_PLACE,
+    NEW_PIECE,
+    PIECE_IN_HAND,
     NUMBER_PLACED,
 }
 
@@ -224,19 +266,26 @@ Board_matrix :: distinct [4][4]Cell_state
 //              ^                         /       
 //              \ _______________________/ (swap) 
 Number_piece :: struct {
-    piece_state: enum {
-        HIDDEN,
-        FLIPPED, // known but not in hand  
-        IN_HAND,
-        ON_BOARD,
-    },
+    piece_state: Piece_state,
     number:      int,
 }
 
+Piece_state :: enum {
+    HIDDEN,
+    FLIPPED, // known but not in hand  
+    IN_HAND,
+    ON_BOARD,
+}
 init_game :: proc() -> Game {
     game: Game
     for i in 1 ..= 20 {
         game.number_pieces[i - 1].number = i
+    }
+
+    when ODIN_DEBUG {
+        game.number_pieces[0].piece_state = .FLIPPED
+        game.number_pieces[1].piece_state = .FLIPPED
+        game.number_pieces[2].piece_state = .FLIPPED
     }
     return game
 }
@@ -268,19 +317,42 @@ draw_number_in_cell :: proc(
     )
 }
 
-flip_number_piece_and_put_in_hand :: proc(number_pieces: []Number_piece) -> ^Number_piece {
-    indices_of_hidden_pieces := make([dynamic]int, context.temp_allocator)
+draw_number_in_square :: proc(
+    number: int,
+    cell_coords: [2]int,
+    rect: rl.Rectangle,
+    square_length: f32,
+    font_size: f32,
+) {
+    if number == 0 do return
+    using rl
+    font := GetFontDefault()
+    text := fmt.ctprintf("%d", number)
+    measure := MeasureTextEx(font, text, FONT_SIZE, FONT_SPACING)
+    box_rect := get_cell_rect(cell_coords, rect, square_length)
+    DrawTextEx(
+        font,
+        text,
+        {box_rect.x, box_rect.y} + {(square_length - measure.x) / 2, (square_length - measure.y) / 2 + 5},
+        font_size,
+        FONT_SPACING,
+        RAYWHITE,
+    )
+}
+
+take_random_piece_in_hand :: proc(number_pieces: []Number_piece, piece_type_to_take: Piece_state) -> ^Number_piece {
+    indices_of_pieces_of_interest := make([dynamic]int, context.temp_allocator)
 
     number_pieces := number_pieces
     for number_piece, i in number_pieces {
         using number_piece
-        if piece_state == .HIDDEN {
-            append(&indices_of_hidden_pieces, i)
+        if piece_state == piece_type_to_take {
+            append(&indices_of_pieces_of_interest, i)
         }
     }
-    assert(len(indices_of_hidden_pieces) > 0)
+    assert(len(indices_of_pieces_of_interest) > 0)
 
-    index_of_piece_to_flip := rand.choice(indices_of_hidden_pieces[:])
+    index_of_piece_to_flip := rand.choice(indices_of_pieces_of_interest[:])
     number_pieces[index_of_piece_to_flip].piece_state = .IN_HAND
     return &number_pieces[index_of_piece_to_flip]
 }
@@ -291,8 +363,6 @@ random_number :: #force_inline proc(lo := 1, hi := 20, r: ^rand.Rand = nil) -> i
 }
 
 get_cell_rect :: proc(cell_coords: [2]int, board_rect := board_rect, square_length := square_length) -> rl.Rectangle {
-    assert(cell_coords[0] < 4 && cell_coords[0] >= 0)
-    assert(cell_coords[1] < 4 && cell_coords[1] >= 0)
     return(
         rl.Rectangle{
             x = board_rect.x + square_length * auto_cast cell_coords.y,
