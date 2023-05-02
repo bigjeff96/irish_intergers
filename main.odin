@@ -58,13 +58,13 @@ main :: proc() {
             for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
             state = .NEW_NUMBER
         }
-        update_game_state(&game, ctx)
+        game_logic(&game, ctx)
         render_game(&game, ctx)
         free_all(context.temp_allocator)
     }
 }
 
-update_game_state :: proc(game: ^Game, ctx: ^mu.Context) {
+game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     using rl, game
     mouse_position := GetMousePosition()
 
@@ -98,8 +98,6 @@ update_game_state :: proc(game: ^Game, ctx: ^mu.Context) {
             }
         }
     }
-
-
     switch state {
     case .NEW_NUMBER:
         number_to_place = flip_number_piece_and_put_in_hand(game.number_pieces[:]).number
