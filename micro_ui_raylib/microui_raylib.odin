@@ -6,7 +6,7 @@ import "core:strings"
 import rl "vendor:raylib"
 import mu "vendor:microui"
 
-FONT_SIZE_MU :: 14
+FONT_SIZE_MU :: 25
 ui_state := struct {
     mu_ctx:          mu.Context,
     log_buf:         [1 << 16]byte,
@@ -190,11 +190,10 @@ rl_text_height :: proc(font: mu.Font) -> i32 {
     return(
         auto_cast MeasureTextEx(
             GetFontDefault(),
-            strings.clone_to_cstring("Test test yyyy ppp gggQ", context.temp_allocator),
+            strings.clone_to_cstring("Test test yyyy ppp gggQPPKK", context.temp_allocator),
             FONT_SIZE_MU,
             1,
-        ).y -
-        10 \
+        ).y -10
     )
 }
 

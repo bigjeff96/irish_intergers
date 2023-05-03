@@ -17,8 +17,11 @@
 - [-] be able to:
   - [X] take an already flipped number
   - [ ] take a specific flipped number by selecting it via the mouse
+  - [X] put piece in hand in the flipped section
   - [X] choose to flip a number
   - [X] swap a placed number with one in hand or already flipped
 - [ ] check if new piece on board is valid
 - [ ] stop game when in win state
+- [ ] make bigger ui buttons (more like big square)
+- [ ] allow key binding to activate button
     

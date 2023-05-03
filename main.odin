@@ -24,6 +24,7 @@ main :: proc() {
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
     defer CloseWindow()
 
+    // TODO: Make an init function fo microui ctx 
     // microui
     pixels := make([][4]u8, mu.DEFAULT_ATLAS_WIDTH * mu.DEFAULT_ATLAS_HEIGHT)
     for alpha, i in mu.default_atlas_alpha {
@@ -72,15 +73,15 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     defer mu.end(ctx)
 
     @(static)
-    opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE}
+    opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE, .NO_SCROLL}
 
     if mu.window(
            ctx,
            "a series of buttons",
-           mu.Rect{auto_cast board_rect.x - 190, auto_cast board_rect.y, 190, 100},
+           mu.Rect{auto_cast board_rect.x + 550, auto_cast board_rect.y + 125, 320, 100},
            opts,
        ) {
-        mu.layout_row(ctx, {-1})
+        mu.layout_row(ctx, {-1}, 30) // 30 for good height of the buttons
         // hidden -> flipped <-> in_hand -> on_board      
         //              ^                         /       
         //              \ _______________________/ (swap) 
@@ -103,11 +104,25 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                 } else do fmt.println("NO more flipped pieces")
             }
 
+            // NOTE: not great, makes the game less interactive
+            for i in 0 ..< 4 {
+                for j in 0 ..< 4 {
+                    board[i][j].highlighted = false
+                }
+            }
+
         case .PIECE_IN_HAND:
+            if .SUBMIT in mu.button(ctx, "Leave the piece", .NONE, {}) {
+                piece_in_hand.?.piece_state = .FLIPPED
+                state = .NEW_PIECE
+                piece_in_hand = nil
+                return
+            }
+
             one_cell_selected := false // only 1 cell to interact at a time
             mouse_in_ui := mu_rl.mouse_in_ui(ctx)
-            //check collison with each cell
-            loop: for i in 0 ..< 4 {
+            //check collision with each cell
+            for i in 0 ..< 4 {
                 for j in 0 ..< 4 {
                     if mouse_in_ui {
                         board[i][j].highlighted = false
@@ -119,21 +134,22 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                         board[i][j].highlighted = true
                         one_cell_selected = true
                     } else if collision && !IsMouseButtonUp(.LEFT) && !one_cell_selected {
-                        using current_cell := &board[i][j]
+                        using a := &board[i][j]
                         highlighted = true
                         one_cell_selected = true
-                        if number == 0 {
-                            number = piece_in_hand.?.number
-                            state = .NUMBER_PLACED
-                            piece_in_hand.?.piece_state = .ON_BOARD
+                        _, ok := piece_on_board.?
+                        if !ok {
+                            piece_on_board = piece_in_hand
+                            piece_on_board.?.piece_state = .ON_BOARD
                             piece_in_hand = nil
+                            state = .NUMBER_PLACED
                         } else {
                             // swapping pieces
-                            state = .NUMBER_PLACED
-                            number_pieces[board[i][j].number - 1].piece_state = .FLIPPED
-                            board[i][j].number = piece_in_hand.?.number
-                            piece_in_hand.?.piece_state = .ON_BOARD
+                            piece_on_board.?.piece_state = .FLIPPED
+                            piece_on_board = piece_in_hand
+                            piece_on_board.?.piece_state = .ON_BOARD
                             piece_in_hand = nil
+                            state = .NUMBER_PLACED
                         }
                     } else do board[i][j].highlighted = false
                 }
@@ -231,10 +247,7 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
                 30,
             )
         }
-
     }
-
-
 }
 
 Game :: struct {
@@ -255,8 +268,8 @@ Rectangle_cint :: struct {
 }
 
 Cell_state :: struct {
-    number:      int,
-    highlighted: bool,
+    piece_on_board: Maybe(^Number_piece),
+    highlighted:    bool,
 }
 
 // if number is zero -> no number in cell
@@ -295,14 +308,14 @@ draw_number_in_cell :: proc(
     cell_coords: [2]int,
     board_rect: rl.Rectangle = board_rect,
     square_length: f32 = square_length,
+) -> (
+    drawn: bool,
 ) {
+    number_piece := board[cell_coords.x][cell_coords.y].piece_on_board.? or_return
     assert(cell_coords[0] < 4 && cell_coords[0] >= 0)
     assert(cell_coords[1] < 4 && cell_coords[1] >= 0)
-    number := board[cell_coords.x][cell_coords.y].number
-    assert(number <= 20 && number >= 0)
-    // don't draw if cell is empty
-    if number == 0 do return
-    using rl
+    assert(number_piece.piece_state == .ON_BOARD)
+    using rl, number_piece
     font := GetFontDefault()
     text := fmt.ctprintf("%d", number)
     measure := MeasureTextEx(font, text, FONT_SIZE, FONT_SPACING)
@@ -315,6 +328,7 @@ draw_number_in_cell :: proc(
         FONT_SPACING,
         RAYWHITE,
     )
+    return
 }
 
 draw_number_in_square :: proc(
@@ -340,7 +354,10 @@ draw_number_in_square :: proc(
     )
 }
 
-take_random_piece_in_hand :: proc(number_pieces: []Number_piece, piece_type_to_take: Piece_state) -> ^Number_piece {
+take_random_piece_in_hand :: proc(
+    number_pieces: []Number_piece,
+    piece_type_to_take: Piece_state,
+) -> Maybe(^Number_piece) {
     indices_of_pieces_of_interest := make([dynamic]int, context.temp_allocator)
 
     number_pieces := number_pieces
@@ -351,7 +368,6 @@ take_random_piece_in_hand :: proc(number_pieces: []Number_piece, piece_type_to_t
         }
     }
     assert(len(indices_of_pieces_of_interest) > 0)
-
     index_of_piece_to_flip := rand.choice(indices_of_pieces_of_interest[:])
     number_pieces[index_of_piece_to_flip].piece_state = .IN_HAND
     return &number_pieces[index_of_piece_to_flip]
@@ -362,7 +378,11 @@ random_number :: #force_inline proc(lo := 1, hi := 20, r: ^rand.Rand = nil) -> i
     return int(number_float + 0.5)
 }
 
-get_cell_rect :: proc(cell_coords: [2]int, board_rect := board_rect, square_length := square_length) -> rl.Rectangle {
+get_cell_rect :: #force_inline proc(
+    cell_coords: [2]int,
+    board_rect := board_rect,
+    square_length := square_length,
+) -> rl.Rectangle {
     return(
         rl.Rectangle{
             x = board_rect.x + square_length * auto_cast cell_coords.y,
