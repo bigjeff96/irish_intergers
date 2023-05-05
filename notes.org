@@ -16,6 +16,7 @@
 - [X] flip a number
 - [-] be able to:
   - [X] take an already flipped number
+  - [X] refactor code for flipped board and normal board
   - [ ] take a specific flipped number by selecting it via the mouse
   - [X] put piece in hand in the flipped section
   - [X] choose to flip a number
