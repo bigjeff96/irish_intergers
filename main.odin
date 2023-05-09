@@ -86,26 +86,26 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
             if .SUBMIT in mu.button(ctx, "Flip a piece", .NONE, {}) {
                 piece_in_hand = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
                 state = .PIECE_IN_HAND
-		highlight_logic.board_type = .NONE
-		break
+                highlight_logic.board_type = .NONE
+                break
             }
 
-	    highlight_logic.board_type = .NONE
-	    mouse_position := GetMousePosition()
-	    mouse_in_ui := mu_rl.mouse_in_ui(ctx)
-	    mouse_on_flipped_board := CheckCollisionPointRec(mouse_position, flipped_board.rect)
+            highlight_logic.board_type = .NONE
+            mouse_position := GetMousePosition()
+            mouse_in_ui := mu_rl.mouse_in_ui(ctx)
+            mouse_on_flipped_board := CheckCollisionPointRec(mouse_position, flipped_board.rect)
 
-	    using flipped_board
-	    loop_flipped: for i in 0..<rows {
-		for j in 0..<columns {
-		    if mouse_in_ui || !mouse_on_flipped_board {
+            using flipped_board
+            loop_flipped: for i in 0 ..< rows {
+                for j in 0 ..< columns {
+                    if mouse_in_ui || !mouse_on_flipped_board {
                         highlight_logic.board_type = .NONE
                         break loop_flipped
                     }
-		    cell_rect := get_cell_rect(flipped_board, {i,j})
-		    collision := CheckCollisionPointRec(mouse_position, cell_rect)
+                    cell_rect := get_cell_rect(flipped_board, {i, j})
+                    collision := CheckCollisionPointRec(mouse_position, cell_rect)
 
-		    if collision && IsMouseButtonUp(.LEFT) && highlight_logic.board_type == .NONE {
+                    if collision && IsMouseButtonUp(.LEFT) && highlight_logic.board_type == .NONE {
                         highlight_logic.board_type = .FLIPPED
                         highlight_logic.cell_coord = {i, j}
                         /* one_cell_selected = true */
@@ -113,7 +113,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                         highlight_logic.board_type = .FLIPPED
                         highlight_logic.cell_coord = {i, j}
                         /* one_cell_selected = true */
-			number_in_cell, ok := check_if_number_in_cell(number_pieces[:], {i,j})
+                        number_in_cell, ok := check_if_number_in_cell(number_pieces[:], {i, j})
                         if !ok {
                             state = .NEW_PIECE
                         } else {
@@ -123,8 +123,8 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                             state = .PIECE_IN_HAND
                         }
                     }
-		}
-	    }
+                }
+            }
 
         case .PIECE_IN_HAND:
             if .SUBMIT in mu.button(ctx, "Leave the piece", .NONE, {}) {
@@ -136,7 +136,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                 return
             }
 
-	    highlight_logic.board_type = .NONE
+            highlight_logic.board_type = .NONE
             mouse_in_ui := mu_rl.mouse_in_ui(ctx)
             mouse_on_board := CheckCollisionPointRec(mouse_position, board.rect)
             //check collision with each cell
@@ -159,7 +159,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                         /* one_cell_selected = true */
                         number := numbers_on_board[i + board.rows * j]
                         if number == 0 {
-			    // placing piece ob empty cell
+                            // placing piece ob empty cell
                             piece_in_hand.?.piece_state = .ON_BOARD
                             piece_in_hand.?.cell_coords = {i, j}
                             piece_in_hand = nil
@@ -168,7 +168,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                             // swapping pieces
                             number_pieces[number - 1].piece_state = .FLIPPED
                             piece_in_hand.?.piece_state = .ON_BOARD
-			    piece_in_hand.?.cell_coords = {i,j}
+                            piece_in_hand.?.cell_coords = {i, j}
                             piece_in_hand = nil
                             state = .NUMBER_PLACED
                         }
@@ -181,12 +181,12 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     }
 
     check_if_number_in_cell :: proc(number_pieces: []Number_piece, cell_coords: [2]int) -> (number: int, ok: bool) {
-	i,j := expand_values(cell_coords)
-	number = 10*i + j + 1
-	if number_pieces[number - 1].piece_state == .FLIPPED {
-	    ok = true
-	    return
-	} else do return
+        i, j := expand_values(cell_coords)
+        number = 10 * i + j + 1
+        if number_pieces[number - 1].piece_state == .FLIPPED {
+            ok = true
+            return
+        } else do return
     }
 }
 
@@ -258,22 +258,22 @@ init_game :: proc() -> Game {
     }
 
     // choose 4 random pieces to put on the board
-    pieces_to_place : [4]^Number_piece
+    pieces_to_place: [4]^Number_piece
 
     for piece in &pieces_to_place {
-	piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
-	piece.piece_state = .ON_BOARD
+        piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
+        piece.piece_state = .ON_BOARD
     }
-    slice.sort_by_cmp(pieces_to_place[:], proc(a,b: ^Number_piece) -> slice.Ordering {
-	number_a := a.number
-	number_b := b.number
+    slice.sort_by_cmp(pieces_to_place[:], proc(a, b: ^Number_piece) -> slice.Ordering {
+        number_a := a.number
+        number_b := b.number
 
-	if number_a < number_b do return .Less
-	else if number_a == number_b do return .Equal
-	else do return .Greater
+        if number_a < number_b do return .Less
+        else if number_a == number_b do return .Equal
+        else do return .Greater
     })
     for piece, i in &pieces_to_place {
-	piece.cell_coords = {i ,i}
+        piece.cell_coords = {i, i}
     }
     return game
 }
@@ -307,10 +307,7 @@ draw_number_in_square :: proc(board: Board_matrix, number: int, cell_coords: [2]
     )
 }
 
-take_random_piece_in_hand :: proc(
-    number_pieces: []Number_piece,
-    piece_type_to_take: Piece_state,
-) -> ^Number_piece {
+take_random_piece_in_hand :: proc(number_pieces: []Number_piece, piece_type_to_take: Piece_state) -> ^Number_piece {
     indices_of_pieces_of_interest := make([dynamic]int, context.temp_allocator)
 
     number_pieces := number_pieces
