@@ -19,8 +19,8 @@ ui_state := struct {
     bg = {90, 95, 100, 255},
 }
 
-@(deferred_none = deinit_raylib_ctx)
-raylib_ctx :: proc() -> (ctx: ^mu.Context) {
+@(deferred_none = deinit_init_raylib_cxt)
+init_raylib_cxt :: proc() -> (ctx: ^mu.Context) {
 
     pixels := make([][4]u8, mu.DEFAULT_ATLAS_WIDTH * mu.DEFAULT_ATLAS_HEIGHT)
     for alpha, i in mu.default_atlas_alpha {
@@ -46,7 +46,7 @@ raylib_ctx :: proc() -> (ctx: ^mu.Context) {
     return
 }
 
-deinit_raylib_ctx :: proc() {
+deinit_init_raylib_cxt :: proc() {
     rl.UnloadTexture(ui_state.atlas_texture)
     delete(ui_state.pixels_of_image)
 }

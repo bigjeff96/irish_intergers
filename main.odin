@@ -85,7 +85,9 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
         case .NEW_PIECE:
             if .SUBMIT in mu.button(ctx, "Flip a piece", .NONE, {}) {
                 piece_in_hand = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
-                state = .PIECE_IN_HAND
+                _, ok := piece_in_hand.?
+                if !ok do state = .NEW_PIECE
+                else do state = .PIECE_IN_HAND
                 highlight_logic.board_type = .NONE
                 break
             }
@@ -316,7 +318,8 @@ take_random_piece_in_hand :: proc(number_pieces: []Number_piece, piece_type_to_t
             append(&indices_of_pieces_of_interest, i)
         }
     }
-    assert(len(indices_of_pieces_of_interest) > 0)
+    if len(indices_of_pieces_of_interest) == 0 do return nil
+    /* assert(len(indices_of_pieces_of_interest) > 0) */
     index_of_piece_to_flip := rand.choice(indices_of_pieces_of_interest[:])
     number_pieces[index_of_piece_to_flip].piece_state = .IN_HAND
     return &number_pieces[index_of_piece_to_flip]
@@ -400,7 +403,7 @@ main :: proc() {
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
     defer CloseWindow()
     SetTargetFPS(60)
-    ctx := raylib_ctx()
+    ctx := init_raylib_cxt()
     game := init_game()
     for !WindowShouldClose() {
         mu_input(ctx)

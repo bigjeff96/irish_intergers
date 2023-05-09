@@ -22,6 +22,7 @@
   - [X] choose to flip a number
   - [X] swap a placed number with one in hand or already flipped
 - [ ] check if new piece on board is valid
+- [X] if all possible pieces are flipped, no more crashing
 - [X] made a context_init function for microui_raylib
 - [X] start game with 4 pieces on the board
 - [X] correct swapping pieces bug
