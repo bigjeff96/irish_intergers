@@ -10,12 +10,45 @@ FONT_SIZE_MU :: 25
 ui_state := struct {
     mu_ctx:          mu.Context,
     log_buf:         [1 << 16]byte,
+    pixels_of_image: [][4]u8,
     log_buf_len:     int,
     log_buf_updated: bool,
     bg:              mu.Color,
     atlas_texture:   rl.Texture2D,
 } {
     bg = {90, 95, 100, 255},
+}
+
+@(deferred_none = deinit_raylib_ctx)
+raylib_ctx :: proc() -> (ctx: ^mu.Context) {
+
+    pixels := make([][4]u8, mu.DEFAULT_ATLAS_WIDTH * mu.DEFAULT_ATLAS_HEIGHT)
+    for alpha, i in mu.default_atlas_alpha {
+        pixels[i] = {0xff, 0xff, 0xff, alpha}
+    }
+
+    ui_state.pixels_of_image = pixels[:]
+
+    image := rl.Image {
+        data    = raw_data(pixels),
+        width   = mu.DEFAULT_ATLAS_WIDTH,
+        height  = mu.DEFAULT_ATLAS_HEIGHT,
+        mipmaps = 1,
+        format  = .UNCOMPRESSED_R8G8B8A8,
+    }
+    ui_state.atlas_texture = rl.LoadTextureFromImage(image)
+
+    ctx = &ui_state.mu_ctx
+    mu.init(ctx)
+    ctx.text_width = rl_text_width
+    ctx.text_height = rl_text_height
+    ctx.style.spacing += 3
+    return
+}
+
+deinit_raylib_ctx :: proc() {
+    rl.UnloadTexture(ui_state.atlas_texture)
+    delete(ui_state.pixels_of_image)
 }
 
 mu_font :: #force_inline proc(font: int) -> mu.Font {

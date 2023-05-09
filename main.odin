@@ -194,7 +194,6 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
     using rl, game
     BeginDrawing()
     defer EndDrawing()
-    fmt.printf("%v\r", highlight_logic)
 
     ClearBackground(BLACK)
     // draw board_rect and line separators
@@ -385,13 +384,6 @@ render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarde
     }
 }
 
-/* get_board_cell :: #force_inline proc(board: Board_matrix, cell_coords: [2]int) -> ^Cell_state { */
-/*     using board */
-/*     assert(cell_coords[0] >= 0 && cell_coords[0] < rows) */
-/*     assert(cell_coords[1] >= 0 && cell_coords[1] < columns) */
-/*     return &cells[cell_coords[0] + cell_coords[1] * rows] */
-/* } */
-
 import "core:fmt"
 import "core:c"
 import "core:math/rand"
@@ -407,35 +399,10 @@ main :: proc() {
     SetTraceLogLevel(.WARNING)
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
     defer CloseWindow()
-
-    // TODO: Make an init function fo microui ctx 
-    // microui
-    pixels := make([][4]u8, mu.DEFAULT_ATLAS_WIDTH * mu.DEFAULT_ATLAS_HEIGHT)
-    for alpha, i in mu.default_atlas_alpha {
-        pixels[i] = {0xff, 0xff, 0xff, alpha}
-    }
-    defer delete(pixels)
-
-    image := rl.Image {
-        data    = raw_data(pixels),
-        width   = mu.DEFAULT_ATLAS_WIDTH,
-        height  = mu.DEFAULT_ATLAS_HEIGHT,
-        mipmaps = 1,
-        format  = .UNCOMPRESSED_R8G8B8A8,
-    }
-    ui_state.atlas_texture = rl.LoadTextureFromImage(image)
-    defer rl.UnloadTexture(ui_state.atlas_texture)
-
-    ctx := &ui_state.mu_ctx
-    mu.init(ctx)
-    ctx.text_width = rl_text_width
-    ctx.text_height = rl_text_height
-    ctx.style.spacing += 3
-
     SetTargetFPS(60)
+    ctx := raylib_ctx()
     game := init_game()
     for !WindowShouldClose() {
-        using game
         mu_input(ctx)
         if IsKeyPressed(.Q) do break
         if IsKeyPressed(.R) {
