@@ -257,10 +257,23 @@ init_game :: proc() -> Game {
         rect.height = 2 * square_length
     }
 
-    when ODIN_DEBUG {
-        /* game.number_pieces[0].piece_state = .FLIPPED */
-        /* game.number_pieces[1].piece_state = .FLIPPED */
-        /* game.number_pieces[2].piece_state = .FLIPPED */
+    // choose 4 random pieces to put on the board
+    pieces_to_place : [4]^Number_piece
+
+    for piece in &pieces_to_place {
+	piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
+	piece.piece_state = .ON_BOARD
+    }
+    slice.sort_by_cmp(pieces_to_place[:], proc(a,b: ^Number_piece) -> slice.Ordering {
+	number_a := a.number
+	number_b := b.number
+
+	if number_a < number_b do return .Less
+	else if number_a == number_b do return .Equal
+	else do return .Greater
+    })
+    for piece, i in &pieces_to_place {
+	piece.cell_coords = {i ,i}
     }
     return game
 }
@@ -297,7 +310,7 @@ draw_number_in_square :: proc(board: Board_matrix, number: int, cell_coords: [2]
 take_random_piece_in_hand :: proc(
     number_pieces: []Number_piece,
     piece_type_to_take: Piece_state,
-) -> Maybe(^Number_piece) {
+) -> ^Number_piece {
     indices_of_pieces_of_interest := make([dynamic]int, context.temp_allocator)
 
     number_pieces := number_pieces
@@ -386,6 +399,7 @@ import "core:fmt"
 import "core:c"
 import "core:math/rand"
 import "core:mem"
+import "core:slice"
 import mu "vendor:microui"
 import mu_rl "micro_ui_raylib"
 import rl "vendor:raylib"
@@ -428,8 +442,7 @@ main :: proc() {
         mu_input(ctx)
         if IsKeyPressed(.Q) do break
         if IsKeyPressed(.R) {
-            for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
-            state = .NEW_PIECE
+            game = init_game()
         }
         game_logic(&game, ctx)
         render_game(&game, ctx)

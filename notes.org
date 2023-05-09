@@ -22,7 +22,7 @@
   - [X] choose to flip a number
   - [X] swap a placed number with one in hand or already flipped
 - [ ] check if new piece on board is valid
-- [ ] start game with 4 pieces on the board
+- [X] start game with 4 pieces on the board
 - [X] correct swapping pieces bug
 - [ ] strong consideration to remove Maybe from the codebase
 - [X] instead of storing pointer to pieces on board, put board and cell position in piece struct (give it a try)
