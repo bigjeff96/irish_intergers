@@ -24,9 +24,7 @@ Game_state :: enum {
 Rectangle_cint :: struct {
     x, y, width, height: c.int,
 }
-
 Cell_state :: struct {
-    number:      Maybe(int),
     highlighted: bool,
 }
 
@@ -45,6 +43,7 @@ Board_matrix :: struct {
 Number_piece :: struct {
     piece_state: Piece_state,
     number:      int,
+    cell_coords: [2]int,
 }
 
 Piece_state :: enum {
@@ -63,6 +62,8 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
 
     @(static)
     opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE, .NO_SCROLL}
+
+    numbers_on_board := get_numbers_on_board(game)
 
     if mu.window(
            ctx,
@@ -90,18 +91,6 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                 if total_flipped != 0 {
                     piece_in_hand = take_random_piece_in_hand(number_pieces[:], .FLIPPED)
                     state = .PIECE_IN_HAND
-
-                    for i in 0 ..< flipped_board.rows {
-                        for j in 0 ..< flipped_board.columns {
-                            cell := get_board_cell(flipped_board, {i, j})
-                            number_on_cell, ok := cell.number.?
-                            if ok {
-                                if number_on_cell == piece_in_hand.?.number {
-                                    cell.number = nil
-                                }
-                            }
-                        }
-                    }
                 } else do fmt.println("No more flipped pieces")
             }
 
@@ -116,7 +105,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
             if .SUBMIT in mu.button(ctx, "Leave the piece", .NONE, {}) {
                 piece_in_hand.?.piece_state = .FLIPPED
                 number := piece_in_hand.?.number
-                flipped_board.cells[number - 1].number = number
+                /* flipped_board.cells[number - 1].number = number */
                 state = .NEW_PIECE
                 piece_in_hand = nil
                 return
@@ -133,6 +122,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                     }
                     cell_rect := get_cell_rect(board, {i, j})
                     collision := CheckCollisionPointRec(mouse_position, cell_rect)
+
                     if collision && IsMouseButtonUp(.LEFT) && !one_cell_selected {
                         get_board_cell(board, {i, j}).highlighted = true
                         one_cell_selected = true
@@ -140,16 +130,17 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                         using a := get_board_cell(board, {i, j})
                         highlighted = true
                         one_cell_selected = true
-                        _, ok := number.?
-                        if !ok {
-                            number = piece_in_hand.?.number
+                        number := numbers_on_board[i + board.rows * j]
+                        if number == 0 {
+                            /* number = piece_in_hand.?.number */
+                            piece_in_hand.?.piece_state = .ON_BOARD
+                            piece_in_hand.?.cell_coords = {i, j}
                             piece_in_hand = nil
                             state = .NUMBER_PLACED
                         } else {
                             // swapping pieces
-                            number_pieces[number.? - 1].piece_state = .FLIPPED
-                            flipped_board.cells[number.? - 1].number = number
-                            number = piece_in_hand.?.number
+                            number_pieces[number - 1].piece_state = .FLIPPED
+                            piece_in_hand.?.piece_state = .ON_BOARD
                             piece_in_hand = nil
                             state = .NUMBER_PLACED
                         }
@@ -170,17 +161,9 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
     ClearBackground(BLACK)
     // draw board_rect and line separators
     defer {
-        render_board(
-            board = board,
-            font_size = FONT_SIZE,
-            font_spacing = FONT_SPACING,
-            boarder_thickness = 6,
-            grid_thickness = 3,
-        )
+        render_board(game, .BOARD, FONT_SIZE, 6, 3)
         mu_rl.render(ctx)
     }
-
-
     // number to place, right of the board
     DrawText(
         fmt.ctprintf("Number in hand:"),
@@ -208,8 +191,7 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
         FONT_SIZE - 20,
         RAYWHITE,
     )
-    // render the flipped numbers
-    render_board(board = flipped_board, font_size = 30, font_spacing = 5, boarder_thickness = 2, grid_thickness = 1)
+    render_board(game, .FLIPPED, 30, 2, 1)
 }
 
 init_game :: proc() -> Game {
@@ -241,53 +223,35 @@ init_game :: proc() -> Game {
 
     when ODIN_DEBUG {
         game.number_pieces[0].piece_state = .FLIPPED
-        game.flipped_board.cells[0].number = game.number_pieces[0].number
         game.number_pieces[1].piece_state = .FLIPPED
-        game.flipped_board.cells[1].number = game.number_pieces[1].number
         game.number_pieces[2].piece_state = .FLIPPED
-        game.flipped_board.cells[2].number = game.number_pieces[2].number
     }
     return game
 }
 
-draw_number_in_cell :: proc(
-    board: Board_matrix,
-    cell_coords: [2]int,
-    font_size := FONT_SIZE,
-    font_spacing := FONT_SPACING,
-) -> (
-    drawn: bool,
-) {
-    number := get_board_cell(board, cell_coords).number.? or_return
-    assert(cell_coords[0] < board.rows && cell_coords[0] >= 0)
-    assert(cell_coords[1] < board.columns && cell_coords[1] >= 0)
-    using rl
-    font := GetFontDefault()
-    text := fmt.ctprintf("%d", number)
-    measure := MeasureTextEx(font, text, auto_cast font_size, auto_cast font_spacing)
-    box_rect := get_cell_rect(board, cell_coords)
-    DrawTextEx(
-        font,
-        text,
-        {box_rect.x, box_rect.y} + {(board.square_length - measure.x) / 2, (board.square_length - measure.y) / 2 + 5},
-        auto_cast font_size,
-        auto_cast font_spacing,
-        RAYWHITE,
-    )
-    return
+get_numbers_on_board :: proc(game: ^Game, temp_allocator := context.temp_allocator) -> []int {
+    using game.board
+    board_numbers := make([]int, rows * columns, temp_allocator)
+
+    for piece in game.number_pieces do if piece.piece_state == .ON_BOARD {
+            i, j := expand_values(piece.cell_coords)
+            board_numbers[i + j * rows] = piece.number
+        }
+
+    return board_numbers
 }
 
 draw_number_in_square :: proc(board: Board_matrix, number: int, cell_coords: [2]int, font_size: f32) {
-    if number == 0 do return
+    assert(number != 0)
     using rl
     font := GetFontDefault()
     text := fmt.ctprintf("%d", number)
-    measure := MeasureTextEx(font, text, FONT_SIZE, FONT_SPACING)
+    measure := MeasureTextEx(font, text, font_size, FONT_SPACING)
     box_rect := get_cell_rect(board, cell_coords)
     DrawTextEx(
         font,
         text,
-        {box_rect.x, box_rect.y} + {(board.square_length - measure.x) / 2, (board.square_length - measure.y) / 2 + 5},
+        {box_rect.x, box_rect.y} + {(board.square_length - measure.x) / 2, (board.square_length - measure.y) / 2 + 2},
         font_size,
         FONT_SPACING,
         RAYWHITE,
@@ -313,20 +277,36 @@ take_random_piece_in_hand :: proc(
     return &number_pieces[index_of_piece_to_flip]
 }
 
-get_cell_rect :: #force_inline proc(board: Board_matrix, cell_coords: [2]int) -> rl.Rectangle {
-    square_length := board.rect.width / auto_cast board.columns
+get_cell_rect :: #force_inline proc(using board: Board_matrix, cell_coords: [2]int) -> rl.Rectangle {
     return(
         rl.Rectangle{
-            x = board.rect.x + square_length * auto_cast cell_coords.y,
-            y = board.rect.y + square_length * auto_cast cell_coords.x,
+            x = rect.x + square_length * auto_cast cell_coords.y,
+            y = rect.y + square_length * auto_cast cell_coords.x,
             width = square_length,
             height = square_length,
         } \
     )
 }
 
-render_board :: proc(board: Board_matrix, font_size, font_spacing, boarder_thickness, grid_thickness: int) {
-    using rl, board
+Board_to_render :: enum {
+    BOARD,
+    FLIPPED,
+}
+
+render_board :: proc(
+    game: ^Game,
+    board_to_render: Board_to_render,
+    font_size, boarder_thickness, grid_thickness: int,
+) {
+    using rl
+    board: Board_matrix
+    if board_to_render == .BOARD {
+        board = game.board
+    } else {
+        board = game.flipped_board
+    }
+
+    using board
     origine := Vector2{rect.x, rect.y}
     for i in 0 ..< rows {
         for j in 0 ..< columns {
@@ -354,10 +334,20 @@ render_board :: proc(board: Board_matrix, font_size, font_spacing, boarder_thick
         DrawLineEx(start, end, auto_cast grid_thickness, RAYWHITE)
     }
     // numbers
-    for i in 0 ..< rows {
-        for j in 0 ..< columns {
-            draw_number_in_cell(board, {i, j}, font_size, font_spacing)
+    if board_to_render == .BOARD {
+        board_numbers := get_numbers_on_board(game)
+        for i in 0 ..< rows {
+            for j in 0 ..< columns {
+                number := board_numbers[i + j * rows]
+                if number != 0 do draw_number_in_square(board, number, {i, j}, auto_cast font_size)
+            }
         }
+    } else {
+        for piece in game.number_pieces do if piece.piece_state == .FLIPPED {
+                using piece
+                i, j := (number - 1) / 10, (number - 1) % 10
+                draw_number_in_square(board, number, {i, j}, auto_cast font_size)
+            }
     }
 }
 
