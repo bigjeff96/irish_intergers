@@ -1,65 +1,57 @@
 package irish_integers
 
-import "core:fmt"
-import "core:c"
-import "core:math/rand"
-import "core:mem"
-import mu "vendor:microui"
-import mu_rl "micro_ui_raylib"
-import rl "vendor:raylib"
-
 WINDOW_HEIGHT :: 1080
 WINDOW_WIDTH :: 1920
 FONT_SIZE :: 69
 FONT_SPACING :: 5
 BOARD_SIZE :: 500
 
-main :: proc() {
-    using rl, mu_rl
-    SetConfigFlags({.VSYNC_HINT, .MSAA_4X_HINT})
-    SetTraceLogLevel(.WARNING)
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
-    defer CloseWindow()
+Game :: struct {
+    state:             Game_state,
+    piece_in_hand:     Maybe(^Number_piece),
+    board:             Board_matrix,
+    flipped_board:     Board_matrix,
+    number_pieces:     [20]Number_piece,
+    next_flipped_cell: int,
+}
 
-    // TODO: Make an init function fo microui ctx 
-    // microui
-    pixels := make([][4]u8, mu.DEFAULT_ATLAS_WIDTH * mu.DEFAULT_ATLAS_HEIGHT)
-    for alpha, i in mu.default_atlas_alpha {
-        pixels[i] = {0xff, 0xff, 0xff, alpha}
-    }
-    defer delete(pixels)
+Game_state :: enum {
+    NEW_PIECE,
+    PIECE_IN_HAND,
+    NUMBER_PLACED,
+}
 
-    image := rl.Image {
-        data    = raw_data(pixels),
-        width   = mu.DEFAULT_ATLAS_WIDTH,
-        height  = mu.DEFAULT_ATLAS_HEIGHT,
-        mipmaps = 1,
-        format  = .UNCOMPRESSED_R8G8B8A8,
-    }
-    ui_state.atlas_texture = rl.LoadTextureFromImage(image)
-    defer rl.UnloadTexture(ui_state.atlas_texture)
+Rectangle_cint :: struct {
+    x, y, width, height: c.int,
+}
 
-    ctx := &ui_state.mu_ctx
-    mu.init(ctx)
-    ctx.text_width = rl_text_width
-    ctx.text_height = rl_text_height
-    ctx.style.spacing += 3
+Cell_state :: struct {
+    number:      Maybe(int),
+    highlighted: bool,
+}
 
-    SetTargetFPS(60)
-    game := init_game()
-    for !WindowShouldClose() {
-        using game
-        mu_input(ctx)
-        if IsKeyPressed(.Q) do break
-        if IsKeyPressed(.R) {
-            mem.set(&game.board, 0, size_of(Cell_state) * 16)
-            for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
-            state = .NEW_PIECE
-        }
-        game_logic(&game, ctx)
-        render_game(&game, ctx)
-        free_all(context.temp_allocator)
-    }
+// if number is zero -> no number in cell
+Board_matrix :: struct {
+    cells:         []Cell_state,
+    rows:          int,
+    columns:       int,
+    rect:          rl.Rectangle,
+    square_length: f32,
+}
+
+// hidden -> flipped <-> in_hand -> on_board      
+//              ^                         /       
+//              \ _______________________/ (swap) 
+Number_piece :: struct {
+    piece_state: Piece_state,
+    number:      int,
+}
+
+Piece_state :: enum {
+    HIDDEN,
+    FLIPPED, // known but not in hand  
+    IN_HAND,
+    ON_BOARD,
 }
 
 game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
@@ -220,53 +212,6 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
     render_board(board = flipped_board, font_size = 30, font_spacing = 5, boarder_thickness = 2, grid_thickness = 1)
 }
 
-Game :: struct {
-    state:             Game_state,
-    piece_in_hand:     Maybe(^Number_piece),
-    board:             Board_matrix,
-    flipped_board:     Board_matrix,
-    number_pieces:     [20]Number_piece,
-    next_flipped_cell: int,
-}
-
-Game_state :: enum {
-    NEW_PIECE,
-    PIECE_IN_HAND,
-    NUMBER_PLACED,
-}
-
-Rectangle_cint :: struct {
-    x, y, width, height: c.int,
-}
-
-Cell_state :: struct {
-    number:      Maybe(int),
-    highlighted: bool,
-}
-
-// if number is zero -> no number in cell
-Board_matrix :: struct {
-    cells:         []Cell_state,
-    rows:          int,
-    columns:       int,
-    rect:          rl.Rectangle,
-    square_length: f32,
-}
-
-// hidden -> flipped <-> in_hand -> on_board      
-//              ^                         /       
-//              \ _______________________/ (swap) 
-Number_piece :: struct {
-    piece_state: Piece_state,
-    number:      int,
-}
-
-Piece_state :: enum {
-    HIDDEN,
-    FLIPPED, // known but not in hand  
-    IN_HAND,
-    ON_BOARD,
-}
 init_game :: proc() -> Game {
     game: Game
     for i in 1 ..= 20 {
@@ -421,4 +366,60 @@ get_board_cell :: #force_inline proc(board: Board_matrix, cell_coords: [2]int) -
     assert(cell_coords[0] >= 0 && cell_coords[0] < rows)
     assert(cell_coords[1] >= 0 && cell_coords[1] < columns)
     return &cells[cell_coords[0] + cell_coords[1] * rows]
+}
+
+import "core:fmt"
+import "core:c"
+import "core:math/rand"
+import "core:mem"
+import mu "vendor:microui"
+import mu_rl "micro_ui_raylib"
+import rl "vendor:raylib"
+
+main :: proc() {
+    using rl, mu_rl
+    SetConfigFlags({.VSYNC_HINT, .MSAA_4X_HINT})
+    SetTraceLogLevel(.WARNING)
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
+    defer CloseWindow()
+
+    // TODO: Make an init function fo microui ctx 
+    // microui
+    pixels := make([][4]u8, mu.DEFAULT_ATLAS_WIDTH * mu.DEFAULT_ATLAS_HEIGHT)
+    for alpha, i in mu.default_atlas_alpha {
+        pixels[i] = {0xff, 0xff, 0xff, alpha}
+    }
+    defer delete(pixels)
+
+    image := rl.Image {
+        data    = raw_data(pixels),
+        width   = mu.DEFAULT_ATLAS_WIDTH,
+        height  = mu.DEFAULT_ATLAS_HEIGHT,
+        mipmaps = 1,
+        format  = .UNCOMPRESSED_R8G8B8A8,
+    }
+    ui_state.atlas_texture = rl.LoadTextureFromImage(image)
+    defer rl.UnloadTexture(ui_state.atlas_texture)
+
+    ctx := &ui_state.mu_ctx
+    mu.init(ctx)
+    ctx.text_width = rl_text_width
+    ctx.text_height = rl_text_height
+    ctx.style.spacing += 3
+
+    SetTargetFPS(60)
+    game := init_game()
+    for !WindowShouldClose() {
+        using game
+        mu_input(ctx)
+        if IsKeyPressed(.Q) do break
+        if IsKeyPressed(.R) {
+            mem.set(&game.board, 0, size_of(Cell_state) * 16)
+            for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
+            state = .NEW_PIECE
+        }
+        game_logic(&game, ctx)
+        render_game(&game, ctx)
+        free_all(context.temp_allocator)
+    }
 }

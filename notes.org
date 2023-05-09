@@ -22,7 +22,9 @@
   - [X] choose to flip a number
   - [X] swap a placed number with one in hand or already flipped
 - [ ] check if new piece on board is valid
+- [ ] strong consideration to remove Maybe from the codebase
+- [ ] instead of storing pointer to pieces on board, put board and cell position in piece struct (give it a try)
 - [ ] stop game when in win state
-- [ ] make bigger ui buttons (more like big square)
+- [X] make bigger ui buttons (more like big square)
 - [ ] allow key binding to activate button
     
