@@ -23,7 +23,8 @@
   - [X] swap a placed number with one in hand or already flipped
 - [ ] check if new piece on board is valid
 - [ ] strong consideration to remove Maybe from the codebase
-- [ ] instead of storing pointer to pieces on board, put board and cell position in piece struct (give it a try)
+- [X] instead of storing pointer to pieces on board, put board and cell position in piece struct (give it a try)
+- [ ] remove cell_state, since it only holds highlight bool, but there only can be 1 cell highlighted at a time, better to just put that logic in the game struct
 - [ ] stop game when in win state
 - [X] make bigger ui buttons (more like big square)
 - [ ] allow key binding to activate button

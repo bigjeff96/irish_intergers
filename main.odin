@@ -13,6 +13,10 @@ Game :: struct {
     flipped_board:     Board_matrix,
     number_pieces:     [20]Number_piece,
     next_flipped_cell: int,
+    highlight_logic:   struct {
+        board_type: Board_type,
+        cell_coord: [2]int,
+    },
 }
 
 Game_state :: enum {
@@ -24,13 +28,9 @@ Game_state :: enum {
 Rectangle_cint :: struct {
     x, y, width, height: c.int,
 }
-Cell_state :: struct {
-    highlighted: bool,
-}
 
 // if number is zero -> no number in cell
 Board_matrix :: struct {
-    cells:         []Cell_state,
     rows:          int,
     columns:       int,
     rect:          rl.Rectangle,
@@ -93,13 +93,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                     state = .PIECE_IN_HAND
                 } else do fmt.println("No more flipped pieces")
             }
-
-            // NOTE: not great, makes the game less interactive
-            for i in 0 ..< board.rows {
-                for j in 0 ..< board.columns {
-                    get_board_cell(board, {i, j}).highlighted = false
-                }
-            }
+            highlight_logic.board_type = .NONE
 
         case .PIECE_IN_HAND:
             if .SUBMIT in mu.button(ctx, "Leave the piece", .NONE, {}) {
@@ -111,28 +105,30 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                 return
             }
 
-            one_cell_selected := false // only 1 cell to interact at a time
+	    highlight_logic.board_type = .NONE
             mouse_in_ui := mu_rl.mouse_in_ui(ctx)
+            mouse_on_board := CheckCollisionPointRec(mouse_position, board.rect)
             //check collision with each cell
-            for i in 0 ..< board.rows {
+            loop: for i in 0 ..< board.rows {
                 for j in 0 ..< board.columns {
-                    if mouse_in_ui {
-                        get_board_cell(board, {i, j}).highlighted = false
-                        continue
+                    if mouse_in_ui || !mouse_on_board {
+                        highlight_logic.board_type = .NONE
+                        break loop
                     }
                     cell_rect := get_cell_rect(board, {i, j})
                     collision := CheckCollisionPointRec(mouse_position, cell_rect)
 
-                    if collision && IsMouseButtonUp(.LEFT) && !one_cell_selected {
-                        get_board_cell(board, {i, j}).highlighted = true
-                        one_cell_selected = true
-                    } else if collision && !IsMouseButtonUp(.LEFT) && !one_cell_selected {
-                        using a := get_board_cell(board, {i, j})
-                        highlighted = true
-                        one_cell_selected = true
+                    if collision && IsMouseButtonUp(.LEFT) && highlight_logic.board_type == .NONE {
+                        highlight_logic.board_type = .BOARD
+                        highlight_logic.cell_coord = {i, j}
+                        /* one_cell_selected = true */
+                    } else if collision && !IsMouseButtonUp(.LEFT) && highlight_logic.board_type == .NONE {
+                        highlight_logic.board_type = .BOARD
+                        highlight_logic.cell_coord = {i, j}
+                        /* one_cell_selected = true */
                         number := numbers_on_board[i + board.rows * j]
                         if number == 0 {
-                            /* number = piece_in_hand.?.number */
+			    // placing piece ob empty cell
                             piece_in_hand.?.piece_state = .ON_BOARD
                             piece_in_hand.?.cell_coords = {i, j}
                             piece_in_hand = nil
@@ -144,7 +140,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                             piece_in_hand = nil
                             state = .NUMBER_PLACED
                         }
-                    } else do get_board_cell(board, {i, j}).highlighted = false
+                    }
                 }
             }
         case .NUMBER_PLACED:
@@ -157,6 +153,7 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
     using rl, game
     BeginDrawing()
     defer EndDrawing()
+    fmt.printf("%v\r", highlight_logic)
 
     ClearBackground(BLACK)
     // draw board_rect and line separators
@@ -204,7 +201,6 @@ init_game :: proc() -> Game {
         using game.board
         rows = 4
         columns = 4
-        cells = make([]Cell_state, rows * columns)
         rect = rl.Rectangle{(WINDOW_WIDTH - BOARD_SIZE) / 2, (WINDOW_HEIGHT - BOARD_SIZE) / 2, BOARD_SIZE, BOARD_SIZE}
         square_length = rect.width / auto_cast columns
     }
@@ -213,7 +209,6 @@ init_game :: proc() -> Game {
         using game.flipped_board
         rows = 2
         columns = 10
-        cells = make([]Cell_state, rows * columns)
         rect = game.board.rect
         rect.y -= 200
         rect.x -= 100
@@ -288,16 +283,13 @@ get_cell_rect :: #force_inline proc(using board: Board_matrix, cell_coords: [2]i
     )
 }
 
-Board_to_render :: enum {
+Board_type :: enum {
+    NONE,
     BOARD,
     FLIPPED,
 }
 
-render_board :: proc(
-    game: ^Game,
-    board_to_render: Board_to_render,
-    font_size, boarder_thickness, grid_thickness: int,
-) {
+render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarder_thickness, grid_thickness: int) {
     using rl
     board: Board_matrix
     if board_to_render == .BOARD {
@@ -308,15 +300,12 @@ render_board :: proc(
 
     using board
     origine := Vector2{rect.x, rect.y}
-    for i in 0 ..< rows {
-        for j in 0 ..< columns {
-            using current_cell := get_board_cell(board, {i, j})
-            if highlighted {
-                cell_rect := get_cell_rect(board, {i, j})
-                DrawRectangleRec(cell_rect, GRAY)
-            }
-        }
+
+    if game.highlight_logic.board_type == board_to_render {
+        box_rect := get_cell_rect(board, game.highlight_logic.cell_coord)
+        DrawRectangleRec(box_rect, GRAY)
     }
+
     // board_rect
     DrawRectangleLinesEx(rect, auto_cast boarder_thickness, RAYWHITE)
     // vertical
@@ -351,12 +340,12 @@ render_board :: proc(
     }
 }
 
-get_board_cell :: #force_inline proc(board: Board_matrix, cell_coords: [2]int) -> ^Cell_state {
-    using board
-    assert(cell_coords[0] >= 0 && cell_coords[0] < rows)
-    assert(cell_coords[1] >= 0 && cell_coords[1] < columns)
-    return &cells[cell_coords[0] + cell_coords[1] * rows]
-}
+/* get_board_cell :: #force_inline proc(board: Board_matrix, cell_coords: [2]int) -> ^Cell_state { */
+/*     using board */
+/*     assert(cell_coords[0] >= 0 && cell_coords[0] < rows) */
+/*     assert(cell_coords[1] >= 0 && cell_coords[1] < columns) */
+/*     return &cells[cell_coords[0] + cell_coords[1] * rows] */
+/* } */
 
 import "core:fmt"
 import "core:c"
@@ -404,7 +393,6 @@ main :: proc() {
         mu_input(ctx)
         if IsKeyPressed(.Q) do break
         if IsKeyPressed(.R) {
-            mem.set(&game.board, 0, size_of(Cell_state) * 16)
             for number_piece in &game.number_pieces do number_piece.piece_state = .HIDDEN
             state = .NEW_PIECE
         }
