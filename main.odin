@@ -53,6 +53,12 @@ Piece_state :: enum {
     ON_BOARD,
 }
 
+Board_type :: enum {
+    NONE,
+    BOARD,
+    FLIPPED,
+}
+
 game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     using rl, game
     mouse_position := GetMousePosition()
@@ -80,20 +86,45 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
             if .SUBMIT in mu.button(ctx, "Flip a piece", .NONE, {}) {
                 piece_in_hand = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
                 state = .PIECE_IN_HAND
+		highlight_logic.board_type = .NONE
+		break
             }
 
-            if .SUBMIT in mu.button(ctx, "Take a known piece RNG", .NONE, {}) {
-                //Take a random known piece
-                total_flipped := 0
-                for number_piece in number_pieces {
-                    if number_piece.piece_state == .FLIPPED do total_flipped += 1
-                }
-                if total_flipped != 0 {
-                    piece_in_hand = take_random_piece_in_hand(number_pieces[:], .FLIPPED)
-                    state = .PIECE_IN_HAND
-                } else do fmt.println("No more flipped pieces")
-            }
-            highlight_logic.board_type = .NONE
+	    highlight_logic.board_type = .NONE
+	    mouse_position := GetMousePosition()
+	    mouse_in_ui := mu_rl.mouse_in_ui(ctx)
+	    mouse_on_flipped_board := CheckCollisionPointRec(mouse_position, flipped_board.rect)
+
+	    using flipped_board
+	    loop_flipped: for i in 0..<rows {
+		for j in 0..<columns {
+		    if mouse_in_ui || !mouse_on_flipped_board {
+                        highlight_logic.board_type = .NONE
+                        break loop_flipped
+                    }
+		    cell_rect := get_cell_rect(flipped_board, {i,j})
+		    collision := CheckCollisionPointRec(mouse_position, cell_rect)
+
+		    if collision && IsMouseButtonUp(.LEFT) && highlight_logic.board_type == .NONE {
+                        highlight_logic.board_type = .FLIPPED
+                        highlight_logic.cell_coord = {i, j}
+                        /* one_cell_selected = true */
+                    } else if collision && !IsMouseButtonUp(.LEFT) && highlight_logic.board_type == .NONE {
+                        highlight_logic.board_type = .FLIPPED
+                        highlight_logic.cell_coord = {i, j}
+                        /* one_cell_selected = true */
+			number_in_cell, ok := check_if_number_in_cell(number_pieces[:], {i,j})
+                        if !ok {
+                            state = .NEW_PIECE
+                        } else {
+                            // swapping pieces
+                            piece_in_hand = &number_pieces[number_in_cell - 1]
+                            piece_in_hand.?.piece_state = .IN_HAND
+                            state = .PIECE_IN_HAND
+                        }
+                    }
+		}
+	    }
 
         case .PIECE_IN_HAND:
             if .SUBMIT in mu.button(ctx, "Leave the piece", .NONE, {}) {
@@ -109,11 +140,11 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
             mouse_in_ui := mu_rl.mouse_in_ui(ctx)
             mouse_on_board := CheckCollisionPointRec(mouse_position, board.rect)
             //check collision with each cell
-            loop: for i in 0 ..< board.rows {
+            loop_board: for i in 0 ..< board.rows {
                 for j in 0 ..< board.columns {
                     if mouse_in_ui || !mouse_on_board {
                         highlight_logic.board_type = .NONE
-                        break loop
+                        break loop_board
                     }
                     cell_rect := get_cell_rect(board, {i, j})
                     collision := CheckCollisionPointRec(mouse_position, cell_rect)
@@ -137,6 +168,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                             // swapping pieces
                             number_pieces[number - 1].piece_state = .FLIPPED
                             piece_in_hand.?.piece_state = .ON_BOARD
+			    piece_in_hand.?.cell_coords = {i,j}
                             piece_in_hand = nil
                             state = .NUMBER_PLACED
                         }
@@ -146,6 +178,15 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
         case .NUMBER_PLACED:
             if IsMouseButtonReleased(.LEFT) do state = .NEW_PIECE
         }
+    }
+
+    check_if_number_in_cell :: proc(number_pieces: []Number_piece, cell_coords: [2]int) -> (number: int, ok: bool) {
+	i,j := expand_values(cell_coords)
+	number = 10*i + j + 1
+	if number_pieces[number - 1].piece_state == .FLIPPED {
+	    ok = true
+	    return
+	} else do return
     }
 }
 
@@ -217,9 +258,9 @@ init_game :: proc() -> Game {
     }
 
     when ODIN_DEBUG {
-        game.number_pieces[0].piece_state = .FLIPPED
-        game.number_pieces[1].piece_state = .FLIPPED
-        game.number_pieces[2].piece_state = .FLIPPED
+        /* game.number_pieces[0].piece_state = .FLIPPED */
+        /* game.number_pieces[1].piece_state = .FLIPPED */
+        /* game.number_pieces[2].piece_state = .FLIPPED */
     }
     return game
 }
@@ -281,12 +322,6 @@ get_cell_rect :: #force_inline proc(using board: Board_matrix, cell_coords: [2]i
             height = square_length,
         } \
     )
-}
-
-Board_type :: enum {
-    NONE,
-    BOARD,
-    FLIPPED,
 }
 
 render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarder_thickness, grid_thickness: int) {

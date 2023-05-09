@@ -14,17 +14,19 @@
 - [X] better mouse in ui function
 - [X] show already flipped numbers
 - [X] flip a number
-- [-] be able to:
+- [X] be able to:
   - [X] take an already flipped number
   - [X] refactor code for flipped board and normal board
-  - [ ] take a specific flipped number by selecting it via the mouse
+  - [X] take a specific flipped number by selecting it via the mouse
   - [X] put piece in hand in the flipped section
   - [X] choose to flip a number
   - [X] swap a placed number with one in hand or already flipped
 - [ ] check if new piece on board is valid
+- [ ] start game with 4 pieces on the board
+- [X] correct swapping pieces bug
 - [ ] strong consideration to remove Maybe from the codebase
 - [X] instead of storing pointer to pieces on board, put board and cell position in piece struct (give it a try)
-- [ ] remove cell_state, since it only holds highlight bool, but there only can be 1 cell highlighted at a time, better to just put that logic in the game struct
+- [X] remove cell_state, since it only holds highlight bool, but there only can be 1 cell highlighted at a time, better to just put that logic in the game struct
 - [ ] stop game when in win state
 - [X] make bigger ui buttons (more like big square)
 - [ ] allow key binding to activate button
