@@ -7,13 +7,18 @@ FONT_SPACING :: 5
 BOARD_SIZE :: 500
 
 Game :: struct {
-    state:             Game_state,
-    piece_in_hand:     Maybe(^Number_piece),
-    board:             Board_matrix,
-    flipped_board:     Board_matrix,
-    number_pieces:     [20]Number_piece,
-    next_flipped_cell: int,
-    highlight_logic:   struct {
+    state:                  Game_state,
+    player_turn:            int,
+    piece_in_hand:          Maybe(^Number_piece),
+    main_board:             Board_matrix,
+    side_board:             Board_matrix,
+    new_piece_on_board:     Maybe(^Number_piece),
+    other_piece_if_swapped: Maybe(^Number_piece),
+    swapping:               bool,
+    flipped_board:          Board_matrix,
+    number_pieces:          []Number_piece,
+    next_flipped_cell:      int,
+    highlight_logic:        struct {
         board_type: Board_type,
         cell_coord: [2]int,
     },
@@ -22,11 +27,9 @@ Game :: struct {
 Game_state :: enum {
     NEW_PIECE,
     PIECE_IN_HAND,
+    VALIDATE_PIECE_ON_BOARD,
     NUMBER_PLACED,
-}
-
-Rectangle_cint :: struct {
-    x, y, width, height: c.int,
+    WIN,
 }
 
 // if number is zero -> no number in cell
@@ -37,26 +40,29 @@ Board_matrix :: struct {
     square_length: f32,
 }
 
-// hidden -> flipped <-> in_hand -> on_board      
-//              ^                         /       
-//              \ _______________________/ (swap) 
+// hidden -> flipped <-> in_hand <-> validate_board -> on_board      
+//              ^                                        /       
+//              \ ______________________________________/ (swap) 
 Number_piece :: struct {
     piece_state: Piece_state,
+    index:       int,
     number:      int,
     cell_coords: [2]int,
+    board_id:    Maybe(int),
 }
 
 Piece_state :: enum {
     HIDDEN,
     FLIPPED, // known but not in hand  
     IN_HAND,
-    ON_BOARD,
+    ON_A_BOARD,
 }
 
 Board_type :: enum {
     NONE,
     BOARD,
     FLIPPED,
+    SIDE,
 }
 
 game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
@@ -69,15 +75,15 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     @(static)
     opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE, .NO_SCROLL}
 
-    numbers_on_board := get_numbers_on_board(game)
+    pieces_on_board := get_pieces_on_board(game.number_pieces)
 
     if mu.window(
            ctx,
            "a series of buttons",
-           mu.Rect{auto_cast board.rect.x + 550, auto_cast board.rect.y + 125, 320, 100},
+           mu.Rect{auto_cast main_board.rect.x + 550, auto_cast main_board.rect.y + 125, 213, 100},
            opts,
        ) {
-        mu.layout_row(ctx, {-1}, 30) // 30 for good height of the buttons
+        mu.layout_row(ctx, {-1}, 50) // 50 for good height of the buttons
         // hidden -> flipped <-> in_hand -> on_board      
         //              ^                         /       
         //              \ _______________________/ (swap) 
@@ -115,12 +121,12 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                         highlight_logic.board_type = .FLIPPED
                         highlight_logic.cell_coord = {i, j}
                         /* one_cell_selected = true */
-                        number_in_cell, ok := check_if_number_in_cell(number_pieces[:], {i, j})
+                        index_piece_in_cell, ok := check_if_number_in_cell(number_pieces[:], {i, j})
                         if !ok {
                             state = .NEW_PIECE
                         } else {
                             // swapping pieces
-                            piece_in_hand = &number_pieces[number_in_cell - 1]
+                            piece_in_hand = &number_pieces[index_piece_in_cell]
                             piece_in_hand.?.piece_state = .IN_HAND
                             state = .PIECE_IN_HAND
                         }
@@ -140,15 +146,15 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
 
             highlight_logic.board_type = .NONE
             mouse_in_ui := mu_rl.mouse_in_ui(ctx)
-            mouse_on_board := CheckCollisionPointRec(mouse_position, board.rect)
+            mouse_on_board := CheckCollisionPointRec(mouse_position, main_board.rect)
             //check collision with each cell
-            loop_board: for i in 0 ..< board.rows {
-                for j in 0 ..< board.columns {
+            loop_board: for i in 0 ..< main_board.rows {
+                for j in 0 ..< main_board.columns {
                     if mouse_in_ui || !mouse_on_board {
                         highlight_logic.board_type = .NONE
                         break loop_board
                     }
-                    cell_rect := get_cell_rect(board, {i, j})
+                    cell_rect := get_cell_rect(main_board, {i, j})
                     collision := CheckCollisionPointRec(mouse_position, cell_rect)
 
                     if collision && IsMouseButtonUp(.LEFT) && highlight_logic.board_type == .NONE {
@@ -159,36 +165,83 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                         highlight_logic.board_type = .BOARD
                         highlight_logic.cell_coord = {i, j}
                         /* one_cell_selected = true */
-                        number := numbers_on_board[i + board.rows * j]
-                        if number == 0 {
-                            // placing piece ob empty cell
-                            piece_in_hand.?.piece_state = .ON_BOARD
+                        piece := pieces_on_board[i + main_board.rows * j]
+                        if piece == nil {
+                            // placing piece on empty cell
+                            piece_in_hand.?.piece_state = .ON_A_BOARD
                             piece_in_hand.?.cell_coords = {i, j}
+                            new_piece_on_board = piece_in_hand
                             piece_in_hand = nil
-                            state = .NUMBER_PLACED
+                            state = .VALIDATE_PIECE_ON_BOARD
                         } else {
                             // swapping pieces
-                            number_pieces[number - 1].piece_state = .FLIPPED
-                            piece_in_hand.?.piece_state = .ON_BOARD
+                            swapping = true
+                            other_piece_if_swapped = &number_pieces[piece.index]
+                            other_piece_if_swapped.?.piece_state = .FLIPPED
+                            piece_in_hand.?.piece_state = .ON_A_BOARD
                             piece_in_hand.?.cell_coords = {i, j}
+                            new_piece_on_board = piece_in_hand
                             piece_in_hand = nil
-                            state = .NUMBER_PLACED
+                            state = .VALIDATE_PIECE_ON_BOARD
                         }
                     }
                 }
             }
+
+        case .VALIDATE_PIECE_ON_BOARD:
+            possible_piece := new_piece_on_board.?
+            i, j := expand_values(possible_piece.cell_coords)
+            pieces_on_board[i + main_board.rows * j] = possible_piece
+            ok := check_board_is_valid(pieces_on_board)
+            defer {swapping = false}
+            if ok {
+                state = .NUMBER_PLACED
+                new_piece_on_board = nil
+                if swapping do other_piece_if_swapped = nil
+            } else {
+                new_piece_on_board.?.piece_state = .IN_HAND
+                piece_in_hand = new_piece_on_board
+                state = .PIECE_IN_HAND
+                if swapping {
+                    other_piece_if_swapped.?.piece_state = .ON_A_BOARD
+                    other_piece_if_swapped.?.cell_coords = new_piece_on_board.?.cell_coords
+                }
+                new_piece_on_board = nil
+                other_piece_if_swapped = nil
+            }
+
         case .NUMBER_PLACED:
+            pieces_on_board = get_pieces_on_board(game.number_pieces)
+            total_empty_cells := 0
+            for piece in pieces_on_board {
+                if piece == nil do total_empty_cells += 1
+            }
+            if total_empty_cells == 0 {
+                state = .WIN
+                highlight_logic.board_type = .NONE
+                break
+            }
             if IsMouseButtonReleased(.LEFT) do state = .NEW_PIECE
+
+        case .WIN:
+            // do nothing
         }
     }
 
-    check_if_number_in_cell :: proc(number_pieces: []Number_piece, cell_coords: [2]int) -> (number: int, ok: bool) {
+    check_if_number_in_cell :: proc(number_pieces: []Number_piece, cell_coords: [2]int) -> (piece_index: int, ok: bool) {
         i, j := expand_values(cell_coords)
-        number = 10 * i + j + 1
-        if number_pieces[number - 1].piece_state == .FLIPPED {
+        number := 10 * i + j + 1
+	piece_one := number_pieces[number - 1]
+	piece_two := number_pieces[number + 20 - 1]
+        if number_pieces[number - 1].piece_state == .FLIPPED  {
+	    piece_index = number - 1
             ok = true
             return
-        } else do return
+        } else if number_pieces[number - 1 + 20].piece_state == .FLIPPED {
+	    piece_index = number + 20 - 1
+	    ok = true
+	    return
+	} else do return
     }
 }
 
@@ -206,8 +259,8 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
     // number to place, right of the board
     DrawText(
         fmt.ctprintf("Number in hand:"),
-        auto_cast (board.rect.x + board.rect.width + 50),
-        auto_cast board.rect.y + 20,
+        auto_cast (main_board.rect.x + main_board.rect.width + 50),
+        auto_cast main_board.rect.y + 20,
         25,
         RAYWHITE,
     )
@@ -216,8 +269,8 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
     if ok {
         DrawText(
             fmt.ctprintf("%d", piece_in_hand_ok.number),
-            auto_cast (board.rect.x + board.rect.width + 120),
-            auto_cast board.rect.y + 59,
+            auto_cast (main_board.rect.x + main_board.rect.width + 120),
+            auto_cast main_board.rect.y + 59,
             FONT_SIZE,
             RAYWHITE,
         )
@@ -231,16 +284,35 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
         RAYWHITE,
     )
     render_board(game, .FLIPPED, 30, 2, 1)
+    render_board(game, .SIDE, 30, 2, 1)
+
+    if state == .WIN {
+        text_length := 323 //MeasureText("You Won!!!", FONT_SIZE)
+        DrawText(
+            fmt.ctprintf("You Won!!!"),
+            auto_cast main_board.rect.x + auto_cast (main_board.rect.width - auto_cast text_length) / 2,
+            auto_cast (main_board.rect.y + main_board.rect.height + 100),
+            FONT_SIZE,
+            RAYWHITE,
+        )
+    }
 }
 
 init_game :: proc() -> Game {
     game: Game
+    game.number_pieces = make([]Number_piece, 40)
     for i in 1 ..= 20 {
         game.number_pieces[i - 1].number = i
+	game.number_pieces[i - 1].index = i - 1
+    }
+
+    for i in 21 ..= 40 {
+	game.number_pieces[i - 1].number = i - 20
+	game.number_pieces[i - 1].index = i - 1
     }
 
     {
-        using game.board
+        using game.main_board
         rows = 4
         columns = 4
         rect = rl.Rectangle{(WINDOW_WIDTH - BOARD_SIZE) / 2, (WINDOW_HEIGHT - BOARD_SIZE) / 2, BOARD_SIZE, BOARD_SIZE}
@@ -251,11 +323,22 @@ init_game :: proc() -> Game {
         using game.flipped_board
         rows = 2
         columns = 10
-        rect = game.board.rect
+        rect = game.main_board.rect
         rect.y -= 200
         rect.x -= 100
         square_length = rect.width / auto_cast columns
         rect.height = 2 * square_length
+    }
+
+    {
+	using game.side_board
+	rows = 4
+	columns = 4
+	rect.x = 20
+	rect.y = game.main_board.rect.y + 20
+	square_length = game.flipped_board.square_length
+	rect.width = square_length * 4
+	rect.height = square_length * 4
     }
 
     // choose 4 random pieces to put on the board
@@ -263,15 +346,13 @@ init_game :: proc() -> Game {
 
     for piece in &pieces_to_place {
         piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
-        piece.piece_state = .ON_BOARD
+        piece.piece_state = .ON_A_BOARD
     }
     slice.sort_by_cmp(pieces_to_place[:], proc(a, b: ^Number_piece) -> slice.Ordering {
         number_a := a.number
         number_b := b.number
-
-        if number_a < number_b do return .Less
-        else if number_a == number_b do return .Equal
-        else do return .Greater
+        diff := number_a - number_b
+        return slice.Ordering(int(diff > 0) - int(diff < 0))
     })
     for piece, i in &pieces_to_place {
         piece.cell_coords = {i, i}
@@ -279,13 +360,57 @@ init_game :: proc() -> Game {
     return game
 }
 
-get_numbers_on_board :: proc(game: ^Game, temp_allocator := context.temp_allocator) -> []int {
-    using game.board
-    board_numbers := make([]int, rows * columns, temp_allocator)
+check_board_is_valid :: proc(pieces_on_board: []^Number_piece) -> bool {
+    rows := 4
+    columns := 4
 
-    for piece in game.number_pieces do if piece.piece_state == .ON_BOARD {
+    // check if rows are valid
+    for i in 0 ..< rows {
+	piece_start := pieces_on_board[i]
+	biggest_number_in_row := 0
+	if piece_start != nil do biggest_number_in_row = piece_start.number
+        for j in 1 ..< columns {
+	    possible_piece := pieces_on_board[i + j * rows]
+	    if possible_piece == nil do continue
+            numb := possible_piece.number
+            if numb > biggest_number_in_row {
+                biggest_number_in_row = numb
+                continue
+            } else {
+                return false
+            }
+        }
+    }
+
+    // check if columns are valid
+    for j in 0 ..< columns {
+	piece_start := pieces_on_board[j * rows]
+	biggest_number_in_column := 0
+	if piece_start != nil do biggest_number_in_column = piece_start.number
+        for i in 1 ..< rows {
+            possible_piece := pieces_on_board[i + j * rows]
+	    if possible_piece == nil do continue
+            numb := possible_piece.number
+            if numb > biggest_number_in_column {
+                biggest_number_in_column = numb
+                continue
+            } else {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+get_pieces_on_board :: proc(number_pieces: []Number_piece, temp_allocator := context.temp_allocator) -> []^Number_piece {
+    rows := 4
+    columns := 4
+    number_pieces := number_pieces[:]
+    board_numbers := make([]^Number_piece, rows * columns, temp_allocator)
+
+    for piece in &number_pieces do if piece.piece_state == .ON_A_BOARD {
             i, j := expand_values(piece.cell_coords)
-            board_numbers[i + j * rows] = piece.number
+            board_numbers[i + j * rows] = &piece
         }
 
     return board_numbers
@@ -339,10 +464,16 @@ get_cell_rect :: #force_inline proc(using board: Board_matrix, cell_coords: [2]i
 render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarder_thickness, grid_thickness: int) {
     using rl
     board: Board_matrix
-    if board_to_render == .BOARD {
-        board = game.board
-    } else {
-        board = game.flipped_board
+
+    switch board_to_render {
+    case .BOARD:
+        board = game.main_board
+    case .FLIPPED:
+	board = game.flipped_board
+    case .SIDE:
+	board = game.side_board
+    case .NONE:
+	panic("error in board rendering")
     }
 
     using board
@@ -371,11 +502,11 @@ render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarde
     }
     // numbers
     if board_to_render == .BOARD {
-        board_numbers := get_numbers_on_board(game)
+        board_numbers := get_pieces_on_board(game.number_pieces)
         for i in 0 ..< rows {
             for j in 0 ..< columns {
-                number := board_numbers[i + j * rows]
-                if number != 0 do draw_number_in_square(board, number, {i, j}, auto_cast font_size)
+                piece := board_numbers[i + j * rows]
+                if piece != nil do draw_number_in_square(board, piece.number, {i, j}, auto_cast font_size)
             }
         }
     } else {
@@ -388,9 +519,7 @@ render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarde
 }
 
 import "core:fmt"
-import "core:c"
 import "core:math/rand"
-import "core:mem"
 import "core:slice"
 import mu "vendor:microui"
 import mu_rl "micro_ui_raylib"
@@ -403,7 +532,7 @@ main :: proc() {
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
     defer CloseWindow()
     SetTargetFPS(60)
-    ctx := init_raylib_cxt()
+    ctx := raylib_cxt()
     game := init_game()
     for !WindowShouldClose() {
         mu_input(ctx)

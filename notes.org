@@ -21,15 +21,28 @@
   - [X] put piece in hand in the flipped section
   - [X] choose to flip a number
   - [X] swap a placed number with one in hand or already flipped
-- [ ] check if new piece on board is valid
+- [X] make a function to check if board is valid or not
 - [X] if all possible pieces are flipped, no more crashing
 - [X] made a context_init function for microui_raylib
 - [X] start game with 4 pieces on the board
 - [X] correct swapping pieces bug
-- [ ] strong consideration to remove Maybe from the codebase
 - [X] instead of storing pointer to pieces on board, put board and cell position in piece struct (give it a try)
 - [X] remove cell_state, since it only holds highlight bool, but there only can be 1 cell highlighted at a time, better to just put that logic in the game struct
-- [ ] stop game when in win state
 - [X] make bigger ui buttons (more like big square)
+- [X] check if new piece on board is valid
+- [X] validate swapping of pieces
+- [X] stop game when in win state
+- [ ] main menu so you can choose how many player will there be
 - [ ] allow key binding to activate button
+- [-] make it multiplayer
+  - [X] stop using the number value itself to index the number_pieces array
+  - [X] bug in choosing flipped pieces
+  - [ ] each piece has a board_id if on a board
+  - [ ] correct render_board logic for side board
+  - [X] game struct has an indicator for whose turn is it 
+  - [X] hold multiple boards in the game struct
+  - [ ] after putting a valid piece on the board, swap update player id
+  - [X] render opponent board on the left of the center board
+  - [ ] render text below board saying which player board it belongs to
+  - [ ] update putting pieces on board to take into account which board to put piece on
     
