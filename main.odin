@@ -6,6 +6,9 @@ FONT_SIZE :: 69
 FONT_SPACING :: 5
 BOARD_SIZE :: 500
 
+PROFILLING :: true
+FPS :: false
+
 Game :: struct {
     state:                  Game_state,
     player_turn:            int, // 0 not initialized, 1 player 1, 2 player 2
@@ -66,6 +69,7 @@ Board_type :: enum {
 }
 
 game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
+    when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     using rl, game
     mouse_position := GetMousePosition()
 
@@ -255,9 +259,11 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
             return
         } else do return
     }
+
 }
 
 render_game :: proc(game: ^Game, ctx: ^mu.Context) {
+    when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     using rl, game
     BeginDrawing()
     defer EndDrawing()
@@ -333,6 +339,9 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
             RAYWHITE,
         )
     }
+
+    // show time to render frame
+    when FPS do DrawText(fmt.ctprintf("Frame Duration: %f ms", GetFrameTime() * 1000), 0, 0, 30, RAYWHITE)
 }
 
 init_game :: proc() -> Game {
@@ -401,7 +410,12 @@ init_game :: proc() -> Game {
     return game
 }
 
+free_game :: proc(game: ^Game) {
+    delete(game.number_pieces)
+}
+
 check_board_is_valid :: proc(pieces_on_board: []^Number_piece) -> bool {
+    when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     rows := 4
     columns := 4
 
@@ -448,6 +462,7 @@ get_pieces_on_board :: proc(
     which_player: int,
     temp_allocator := context.temp_allocator,
 ) -> []^Number_piece {
+    when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     rows := 4
     columns := 4
     number_pieces := number_pieces[:]
@@ -461,7 +476,8 @@ get_pieces_on_board :: proc(
     return board_numbers
 }
 
-draw_number_in_square :: proc(board: Board_matrix, number: int, cell_coords: [2]int, font_size: f32) {
+draw_number_in_square :: #force_inline proc(board: Board_matrix, number: int, cell_coords: [2]int, font_size: f32) {
+    when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     assert(number != 0)
     using rl
     font := GetFontDefault()
@@ -496,6 +512,7 @@ take_random_piece_in_hand :: proc(number_pieces: []Number_piece, piece_type_to_t
 }
 
 get_cell_rect :: #force_inline proc(using board: Board_matrix, cell_coords: [2]int) -> rl.Rectangle {
+    when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     return(
         rl.Rectangle{
             x = rect.x + square_length * auto_cast cell_coords.y,
@@ -507,6 +524,12 @@ get_cell_rect :: #force_inline proc(using board: Board_matrix, cell_coords: [2]i
 }
 
 render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarder_thickness, grid_thickness: int) {
+    when PROFILLING do spall.SCOPED_EVENT(
+            &spall_ctx,
+            &spall_buffer,
+            #procedure,
+            fmt.tprintf("rendering %v", board_to_render),
+        )
     using rl
     board: Board_matrix
 
@@ -583,8 +606,20 @@ import "core:slice"
 import mu "vendor:microui"
 import mu_rl "micro_ui_raylib"
 import rl "vendor:raylib"
+import "core:prof/spall"
+
+spall_ctx: spall.Context
+spall_buffer: spall.Buffer
 
 main :: proc() {
+    // spall
+    spall_ctx = spall.context_create("trace_test.spall")
+    defer spall.context_destroy(&spall_ctx)
+
+    buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
+    spall_buffer = spall.buffer_create(buffer_backing)
+    defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
+
     using rl, mu_rl
     SetConfigFlags({.VSYNC_HINT, .MSAA_4X_HINT})
     SetTraceLogLevel(.WARNING)
@@ -593,10 +628,13 @@ main :: proc() {
     SetTargetFPS(60)
     ctx := raylib_cxt()
     game := init_game()
+    defer free_game(&game)
+    when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
     for !WindowShouldClose() {
         mu_input(ctx)
         if IsKeyPressed(.Q) do break
         if IsKeyPressed(.R) {
+            free_game(&game)
             game = init_game()
         }
         game_logic(&game, ctx)

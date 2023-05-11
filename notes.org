@@ -33,6 +33,7 @@
 - [X] validate swapping of pieces
 - [X] stop game when in win state
 - [ ] main menu so you can choose how many player will there be
+- [ ] try out spall to see what are the slow functions in the code
 - [ ] allow key binding to activate button
 - [X] correct highlighting error 
 - [X] make it multiplayer
