@@ -1,6 +1,6 @@
 {
-    "collections": [{ "name": "core", "path": "/home/joseph/Dropbox/Projects/odin/Odin-dev-2023-04/Odin-dev-2023-04/core/" },
-                    { "name": "vendor", "path": "/home/joseph/Dropbox/Projects/odin/Odin-dev-2023-04/Odin-dev-2023-04/vendor/" },
+    "collections": [{ "name": "core", "path": "/home/joseph/Dropbox/Projects/odin/Odin-dev-2023-05/core/" },
+                    { "name": "vendor", "path": "/home/joseph/Dropbox/Projects/odin/Odin-dev-2023-05/vendor/" },
                     { "name": "micro_ui_raylib", "path": "/home/joseph/Dropbox/Projects/irish_integers/micro_ui_raylib/"}],
     "enable_document_symbols": true,
     "enable_semantic_tokens": true,

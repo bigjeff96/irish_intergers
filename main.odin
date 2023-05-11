@@ -8,7 +8,7 @@ BOARD_SIZE :: 500
 
 Game :: struct {
     state:                  Game_state,
-    player_turn:            int,
+    player_turn:            int, // 0 not initialized, 1 player 1, 2 player 2
     piece_in_hand:          Maybe(^Number_piece),
     main_board:             Board_matrix,
     side_board:             Board_matrix,
@@ -48,7 +48,7 @@ Number_piece :: struct {
     index:       int,
     number:      int,
     cell_coords: [2]int,
-    board_id:    Maybe(int),
+    board_id:    int,
 }
 
 Piece_state :: enum {
@@ -75,7 +75,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     @(static)
     opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE, .NO_SCROLL}
 
-    pieces_on_board := get_pieces_on_board(game.number_pieces)
+    pieces_on_board := get_pieces_on_board(game.number_pieces, player_turn)
 
     if mu.window(
            ctx,
@@ -141,6 +141,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                 /* flipped_board.cells[number - 1].number = number */
                 state = .NEW_PIECE
                 piece_in_hand = nil
+                player_turn = 2 if player_turn == 1 else 1
                 return
             }
 
@@ -170,6 +171,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                             // placing piece on empty cell
                             piece_in_hand.?.piece_state = .ON_A_BOARD
                             piece_in_hand.?.cell_coords = {i, j}
+                            piece_in_hand.?.board_id = player_turn
                             new_piece_on_board = piece_in_hand
                             piece_in_hand = nil
                             state = .VALIDATE_PIECE_ON_BOARD
@@ -180,6 +182,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                             other_piece_if_swapped.?.piece_state = .FLIPPED
                             piece_in_hand.?.piece_state = .ON_A_BOARD
                             piece_in_hand.?.cell_coords = {i, j}
+                            piece_in_hand.?.board_id = player_turn
                             new_piece_on_board = piece_in_hand
                             piece_in_hand = nil
                             state = .VALIDATE_PIECE_ON_BOARD
@@ -211,7 +214,7 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
             }
 
         case .NUMBER_PLACED:
-            pieces_on_board = get_pieces_on_board(game.number_pieces)
+            pieces_on_board = get_pieces_on_board(game.number_pieces, player_turn)
             total_empty_cells := 0
             for piece in pieces_on_board {
                 if piece == nil do total_empty_cells += 1
@@ -221,27 +224,36 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
                 highlight_logic.board_type = .NONE
                 break
             }
-            if IsMouseButtonReleased(.LEFT) do state = .NEW_PIECE
+            if IsMouseButtonUp(.LEFT) {
+                state = .NEW_PIECE
+                player_turn = 2 if player_turn == 1 else 1
+            }
 
         case .WIN:
-            // do nothing
+        // do nothing
         }
     }
 
-    check_if_number_in_cell :: proc(number_pieces: []Number_piece, cell_coords: [2]int) -> (piece_index: int, ok: bool) {
+    check_if_number_in_cell :: proc(
+        number_pieces: []Number_piece,
+        cell_coords: [2]int,
+    ) -> (
+        piece_index: int,
+        ok: bool,
+    ) {
         i, j := expand_values(cell_coords)
         number := 10 * i + j + 1
-	piece_one := number_pieces[number - 1]
-	piece_two := number_pieces[number + 20 - 1]
-        if number_pieces[number - 1].piece_state == .FLIPPED  {
-	    piece_index = number - 1
+        piece_one := number_pieces[number - 1]
+        piece_two := number_pieces[number + 20 - 1]
+        if number_pieces[number - 1].piece_state == .FLIPPED {
+            piece_index = number - 1
             ok = true
             return
         } else if number_pieces[number - 1 + 20].piece_state == .FLIPPED {
-	    piece_index = number + 20 - 1
-	    ok = true
-	    return
-	} else do return
+            piece_index = number + 20 - 1
+            ok = true
+            return
+        } else do return
     }
 }
 
@@ -287,12 +299,37 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
     render_board(game, .SIDE, 30, 2, 1)
 
     if state == .WIN {
-        text_length := 323 //MeasureText("You Won!!!", FONT_SIZE)
+        context.allocator = context.temp_allocator
+        cstr := fmt.caprintf("Player %d Wins!!!", player_turn)
+        text_length := MeasureText(cstr, FONT_SIZE)
         DrawText(
-            fmt.ctprintf("You Won!!!"),
+            cstr,
             auto_cast main_board.rect.x + auto_cast (main_board.rect.width - auto_cast text_length) / 2,
             auto_cast (main_board.rect.y + main_board.rect.height + 100),
             FONT_SIZE,
+            RAYWHITE,
+        )
+    } else {
+        // main board
+        context.allocator = context.temp_allocator
+        cstr := fmt.caprintf("Player %d", player_turn)
+        text_length := MeasureText(cstr, FONT_SIZE)
+        DrawText(
+            cstr,
+            auto_cast main_board.rect.x + auto_cast (main_board.rect.width - auto_cast text_length) / 2,
+            auto_cast (main_board.rect.y + main_board.rect.height + 30),
+            FONT_SIZE,
+            RAYWHITE,
+        )
+
+        // side board
+        cstr = fmt.caprintf("Player %d", 3 - player_turn)
+        text_length = MeasureText(cstr, 30)
+        DrawText(
+            cstr,
+            auto_cast side_board.rect.x + auto_cast (side_board.rect.width - auto_cast text_length) / 2,
+            auto_cast (side_board.rect.y + side_board.rect.height + 20),
+            30,
             RAYWHITE,
         )
     }
@@ -301,14 +338,15 @@ render_game :: proc(game: ^Game, ctx: ^mu.Context) {
 init_game :: proc() -> Game {
     game: Game
     game.number_pieces = make([]Number_piece, 40)
+    game.player_turn = 1
     for i in 1 ..= 20 {
         game.number_pieces[i - 1].number = i
-	game.number_pieces[i - 1].index = i - 1
+        game.number_pieces[i - 1].index = i - 1
     }
 
     for i in 21 ..= 40 {
-	game.number_pieces[i - 1].number = i - 20
-	game.number_pieces[i - 1].index = i - 1
+        game.number_pieces[i - 1].number = i - 20
+        game.number_pieces[i - 1].index = i - 1
     }
 
     {
@@ -324,38 +362,41 @@ init_game :: proc() -> Game {
         rows = 2
         columns = 10
         rect = game.main_board.rect
-        rect.y -= 200
-        rect.x -= 100
+        rect.y -= 150
+        rect.x -= 0
         square_length = rect.width / auto_cast columns
         rect.height = 2 * square_length
     }
 
     {
-	using game.side_board
-	rows = 4
-	columns = 4
-	rect.x = 20
-	rect.y = game.main_board.rect.y + 20
-	square_length = game.flipped_board.square_length
-	rect.width = square_length * 4
-	rect.height = square_length * 4
+        using game.side_board
+        rows = 4
+        columns = 4
+        square_length = game.flipped_board.square_length
+        rect.width = square_length * 4
+        rect.height = square_length * 4
+        rect.x = 250
+        rect.y = game.main_board.rect.y + (game.main_board.rect.height - rect.height) / 2
     }
 
     // choose 4 random pieces to put on the board
-    pieces_to_place: [4]^Number_piece
+    for player in 1 ..= 2 {
+        pieces_to_place: [4]^Number_piece
 
-    for piece in &pieces_to_place {
-        piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
-        piece.piece_state = .ON_A_BOARD
-    }
-    slice.sort_by_cmp(pieces_to_place[:], proc(a, b: ^Number_piece) -> slice.Ordering {
-        number_a := a.number
-        number_b := b.number
-        diff := number_a - number_b
-        return slice.Ordering(int(diff > 0) - int(diff < 0))
-    })
-    for piece, i in &pieces_to_place {
-        piece.cell_coords = {i, i}
+        for piece in &pieces_to_place {
+            piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
+            piece.piece_state = .ON_A_BOARD
+            piece.board_id = player
+        }
+        slice.sort_by_cmp(pieces_to_place[:], proc(a, b: ^Number_piece) -> slice.Ordering {
+            number_a := a.number
+            number_b := b.number
+            diff := number_a - number_b
+            return slice.Ordering(int(diff > 0) - int(diff < 0))
+        })
+        for piece, i in &pieces_to_place {
+            piece.cell_coords = {i, i}
+        }
     }
     return game
 }
@@ -366,12 +407,12 @@ check_board_is_valid :: proc(pieces_on_board: []^Number_piece) -> bool {
 
     // check if rows are valid
     for i in 0 ..< rows {
-	piece_start := pieces_on_board[i]
-	biggest_number_in_row := 0
-	if piece_start != nil do biggest_number_in_row = piece_start.number
+        piece_start := pieces_on_board[i]
+        biggest_number_in_row := 0
+        if piece_start != nil do biggest_number_in_row = piece_start.number
         for j in 1 ..< columns {
-	    possible_piece := pieces_on_board[i + j * rows]
-	    if possible_piece == nil do continue
+            possible_piece := pieces_on_board[i + j * rows]
+            if possible_piece == nil do continue
             numb := possible_piece.number
             if numb > biggest_number_in_row {
                 biggest_number_in_row = numb
@@ -384,12 +425,12 @@ check_board_is_valid :: proc(pieces_on_board: []^Number_piece) -> bool {
 
     // check if columns are valid
     for j in 0 ..< columns {
-	piece_start := pieces_on_board[j * rows]
-	biggest_number_in_column := 0
-	if piece_start != nil do biggest_number_in_column = piece_start.number
+        piece_start := pieces_on_board[j * rows]
+        biggest_number_in_column := 0
+        if piece_start != nil do biggest_number_in_column = piece_start.number
         for i in 1 ..< rows {
             possible_piece := pieces_on_board[i + j * rows]
-	    if possible_piece == nil do continue
+            if possible_piece == nil do continue
             numb := possible_piece.number
             if numb > biggest_number_in_column {
                 biggest_number_in_column = numb
@@ -402,13 +443,17 @@ check_board_is_valid :: proc(pieces_on_board: []^Number_piece) -> bool {
     return true
 }
 
-get_pieces_on_board :: proc(number_pieces: []Number_piece, temp_allocator := context.temp_allocator) -> []^Number_piece {
+get_pieces_on_board :: proc(
+    number_pieces: []Number_piece,
+    which_player: int,
+    temp_allocator := context.temp_allocator,
+) -> []^Number_piece {
     rows := 4
     columns := 4
     number_pieces := number_pieces[:]
     board_numbers := make([]^Number_piece, rows * columns, temp_allocator)
 
-    for piece in &number_pieces do if piece.piece_state == .ON_A_BOARD {
+    for piece in &number_pieces do if piece.piece_state == .ON_A_BOARD && piece.board_id == which_player {
             i, j := expand_values(piece.cell_coords)
             board_numbers[i + j * rows] = &piece
         }
@@ -469,11 +514,11 @@ render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarde
     case .BOARD:
         board = game.main_board
     case .FLIPPED:
-	board = game.flipped_board
+        board = game.flipped_board
     case .SIDE:
-	board = game.side_board
+        board = game.side_board
     case .NONE:
-	panic("error in board rendering")
+        panic("error in board rendering")
     }
 
     using board
@@ -501,20 +546,34 @@ render_board :: proc(game: ^Game, board_to_render: Board_type, font_size, boarde
         DrawLineEx(start, end, auto_cast grid_thickness, RAYWHITE)
     }
     // numbers
-    if board_to_render == .BOARD {
-        board_numbers := get_pieces_on_board(game.number_pieces)
+    switch board_to_render {
+    case .BOARD:
+        board_numbers := get_pieces_on_board(game.number_pieces, game.player_turn)
         for i in 0 ..< rows {
             for j in 0 ..< columns {
                 piece := board_numbers[i + j * rows]
                 if piece != nil do draw_number_in_square(board, piece.number, {i, j}, auto_cast font_size)
             }
         }
-    } else {
+
+    case .FLIPPED:
         for piece in game.number_pieces do if piece.piece_state == .FLIPPED {
                 using piece
                 i, j := (number - 1) / 10, (number - 1) % 10
                 draw_number_in_square(board, number, {i, j}, auto_cast font_size)
             }
+
+    case .SIDE:
+        board_numbers := get_pieces_on_board(game.number_pieces, 3 - game.player_turn)
+        for i in 0 ..< rows {
+            for j in 0 ..< columns {
+                piece := board_numbers[i + j * rows]
+                if piece != nil do draw_number_in_square(board, piece.number, {i, j}, auto_cast font_size)
+            }
+        }
+
+    case .NONE:
+        panic("error in render_board")
     }
 }
 

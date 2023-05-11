@@ -34,15 +34,16 @@
 - [X] stop game when in win state
 - [ ] main menu so you can choose how many player will there be
 - [ ] allow key binding to activate button
-- [-] make it multiplayer
+- [X] correct highlighting error 
+- [X] make it multiplayer
   - [X] stop using the number value itself to index the number_pieces array
   - [X] bug in choosing flipped pieces
-  - [ ] each piece has a board_id if on a board
-  - [ ] correct render_board logic for side board
+  - [X] each piece has a board_id if on a board
+  - [X] correct render_board logic for side board
   - [X] game struct has an indicator for whose turn is it 
   - [X] hold multiple boards in the game struct
-  - [ ] after putting a valid piece on the board, swap update player id
+  - [X] after putting a valid piece on the board, swap update player id
   - [X] render opponent board on the left of the center board
-  - [ ] render text below board saying which player board it belongs to
-  - [ ] update putting pieces on board to take into account which board to put piece on
+  - [X] render text below board saying which player board it belongs to
+  - [X] update putting pieces on board to take into account which board to put piece on
     
