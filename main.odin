@@ -8,6 +8,7 @@ BOARD_SIZE :: 500
 
 PROFILLING :: true
 FPS :: false
+MAKE_P1_WIN :: false
 
 Game :: struct {
     state:                  Game_state,
@@ -80,6 +81,8 @@ game_logic :: proc(game: ^Game, ctx: ^mu.Context) {
     opts := mu.Options{.NO_FRAME, .NO_TITLE, .NO_INTERACT, .NO_RESIZE, .NO_SCROLL}
 
     pieces_on_board := get_pieces_on_board(game.number_pieces, player_turn)
+
+    when MAKE_P1_WIN do state = .WIN
 
     if mu.window(
            ctx,
@@ -388,23 +391,33 @@ init_game :: proc() -> Game {
         rect.y = game.main_board.rect.y + (game.main_board.rect.height - rect.height) / 2
     }
 
-    // choose 4 random pieces to put on the board
-    for player in 1 ..= 2 {
-        pieces_to_place: [4]^Number_piece
-
-        for piece in &pieces_to_place {
-            piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
+    // auto win
+    when MAKE_P1_WIN {
+        for i in 0 ..< 16 {
+            piece := &game.number_pieces[i]
             piece.piece_state = .ON_A_BOARD
-            piece.board_id = player
+            piece.board_id = game.player_turn
+            piece.cell_coords = {i % 4, i / 4}
         }
-        slice.sort_by_cmp(pieces_to_place[:], proc(a, b: ^Number_piece) -> slice.Ordering {
-            number_a := a.number
-            number_b := b.number
-            diff := number_a - number_b
-            return slice.Ordering(int(diff > 0) - int(diff < 0))
-        })
-        for piece, i in &pieces_to_place {
-            piece.cell_coords = {i, i}
+    } else {
+        // choose 4 random pieces to put on the board
+        for player in 1 ..= 2 {
+            pieces_to_place: [4]^Number_piece
+
+            for piece in &pieces_to_place {
+                piece = take_random_piece_in_hand(game.number_pieces[:], .HIDDEN)
+                piece.piece_state = .ON_A_BOARD
+                piece.board_id = player
+            }
+            slice.sort_by_cmp(pieces_to_place[:], proc(a, b: ^Number_piece) -> slice.Ordering {
+                number_a := a.number
+                number_b := b.number
+                diff := number_a - number_b
+                return slice.Ordering(int(diff > 0) - int(diff < 0))
+            })
+            for piece, i in &pieces_to_place {
+                piece.cell_coords = {i, i}
+            }
         }
     }
     return game
@@ -611,34 +624,56 @@ import "core:prof/spall"
 spall_ctx: spall.Context
 spall_buffer: spall.Buffer
 
+win_wave_file := #load("win.wav")
+
 main :: proc() {
     // spall
     spall_ctx = spall.context_create("trace_test.spall")
     defer spall.context_destroy(&spall_ctx)
-
     buffer_backing := make([]u8, spall.BUFFER_DEFAULT_SIZE)
     spall_buffer = spall.buffer_create(buffer_backing)
     defer spall.buffer_destroy(&spall_ctx, &spall_buffer)
 
     using rl, mu_rl
     SetConfigFlags({.VSYNC_HINT, .MSAA_4X_HINT})
-    SetTraceLogLevel(.WARNING)
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Irish Integers")
     defer CloseWindow()
-    SetTargetFPS(60)
+    InitAudioDevice()
+    defer CloseAudioDevice()
+
     ctx := raylib_cxt()
     game := init_game()
     defer free_game(&game)
+
     when PROFILLING do spall.SCOPED_EVENT(&spall_ctx, &spall_buffer, #procedure)
+    SetTargetFPS(60)
     for !WindowShouldClose() {
         mu_input(ctx)
         if IsKeyPressed(.Q) do break
+        /* if IsKeyPressed(.M) do PlaySound(win_sound) */
         if IsKeyPressed(.R) {
             free_game(&game)
             game = init_game()
         }
         game_logic(&game, ctx)
         render_game(&game, ctx)
+	// sound
+        if game.state == .WIN {
+            @(static)
+            play_counter := 0
+            win_wave: Wave
+            win_sound: Sound
+            defer play_counter += 1
+            if play_counter == 0 {
+                win_wave = LoadWaveFromMemory(cstring(".wav"), &win_wave_file[0], auto_cast len(win_wave_file))
+                win_sound = LoadSoundFromWave(win_wave)
+                for !IsSoundReady(win_sound) {}
+                PlaySound(win_sound)
+            } else {
+                UnloadSound(win_sound)
+                UnloadWave(win_wave)
+            }
+        }
         free_all(context.temp_allocator)
     }
 }
