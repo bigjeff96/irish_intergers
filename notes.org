@@ -33,8 +33,10 @@
 - [X] validate swapping of pieces
 - [X] stop game when in win state
 - [ ] main menu so you can choose how many player will there be
-- [ ] try out spall to see what are the slow functions in the code
+- [X] try out spall to see what are the slow functions in the code
 - [ ] allow key binding to activate button
+- [X] Winning music
+- [ ] find out how to use royalty free music "win.wav" camw from https://elements.envato.com/huge-win-2PBE8A4?utm_source=mixkit&utm_medium=referral&utm_campaign=elements_mixkit_cs_sfx_tag
 - [X] correct highlighting error 
 - [X] make it multiplayer
   - [X] stop using the number value itself to index the number_pieces array
