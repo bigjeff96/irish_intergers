@@ -1,0 +1,4 @@
+* Irish integers
+A clone of the lucky numbers board game, written in odin
+
+[[image_game.png]]
